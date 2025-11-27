@@ -1,0 +1,182 @@
+/**
+ * Skeleton Loaders - Central Animations & Styles
+ * Progressive loading states for all components
+ */
+
+@use 'sass:color';
+@use '../abstracts/variables' as *;
+
+// ============================================================================
+// SKELETON ANIMATIONS
+// ============================================================================
+
+@keyframes skeleton-shimmer {
+  0% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.6;
+  }
+}
+
+@keyframes skeleton-pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(0.98);
+  }
+}
+
+// ============================================================================
+// BASE SKELETON STYLES
+// ============================================================================
+
+.skeleton-line {
+  background: $color-3;
+  border-radius: 4px;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+// ============================================================================
+// NOTE SKELETON (Timeline, Quotes)
+// ============================================================================
+
+.note-skeleton,
+.quote-skeleton {
+  background: $color-2;
+  border: 1px solid $color-3;
+  border-radius: 6px;
+  padding: $gap;
+  margin: calc($gap / 2) 0;
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+
+  .skeleton-header {
+    display: flex;
+    align-items: center;
+    gap: calc($gap * 0.75);
+    margin-bottom: calc($gap * 0.75);
+
+    .skeleton-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: $color-3;
+      animation: skeleton-shimmer 1.5s ease-in-out infinite;
+      flex-shrink: 0;
+    }
+
+    .skeleton-text-group {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: calc($gap / 2);
+
+      .skeleton-name {
+        width: 120px;
+        height: 14px;
+      }
+
+      .skeleton-timestamp {
+        width: 80px;
+        height: 12px;
+      }
+    }
+  }
+
+  .skeleton-content {
+    display: flex;
+    flex-direction: column;
+    gap: calc($gap / 2);
+
+    .skeleton-text-line {
+      width: 100%;
+      height: 12px;
+
+      &.short {
+        width: 60%;
+      }
+    }
+  }
+}
+
+// ============================================================================
+// PROFILE SKELETON (Avatars)
+// ============================================================================
+
+.profile-skeleton {
+  border-radius: 50%;
+  background: $color-3;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+
+  &--small {
+    width: 24px;
+    height: 24px;
+  }
+
+  &--medium {
+    width: 40px;
+    height: 40px;
+  }
+
+  &--large {
+    width: 80px;
+    height: 80px;
+  }
+}
+
+// ============================================================================
+// MEDIA SKELETON (Images, Videos)
+// ============================================================================
+
+.media-skeleton {
+  position: relative;
+  width: 100%;
+  background: $color-3;
+  border-radius: 8px;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+
+  &--image {
+    padding-bottom: 56.25%; // 16:9 aspect ratio
+  }
+
+  &--video {
+    padding-bottom: 56.25%; // 16:9 aspect ratio
+
+    .media-skeleton__play-icon {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: rgba($color-1, 0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      color: $color-5;
+      opacity: 0.6;
+    }
+  }
+}
+
+// ============================================================================
+// TIMELINE SKELETON (Initial Load)
+// ============================================================================
+
+.timeline-skeleton {
+  padding: $gap;
+
+  .note-skeleton {
+    margin-bottom: $gap;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+}

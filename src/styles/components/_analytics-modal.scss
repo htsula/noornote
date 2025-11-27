@@ -1,0 +1,115 @@
+/**
+ * Analytics Modal - Content-Specific Styles
+ * Modal infrastructure handled by _modal.scss
+ * This file only contains styles specific to analytics content
+ */
+
+@use 'sass:color';
+@use '../abstracts/variables' as *;
+@use '../abstracts/mixins' as *;
+
+// Analytics content container
+.analytics-content {
+  width: 100%;
+}
+
+// Section container
+.analytics-modal__section {
+  margin-bottom: $gap * 1.5;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+
+  h2 {
+    font-size: 19px;
+    font-weight: $font-weight-semibold;
+    line-height: $line-height-tight;
+    color: $color-5;
+    margin: 0 0 calc($gap / 2) 0;
+    @include font-smoothing;
+  }
+}
+
+// Section separator
+.analytics-modal__separator {
+  height: 1px;
+  background: $color-2;
+  margin-bottom: $gap;
+}
+
+// Empty state
+.analytics-modal__empty {
+  color: var(--color-text-secondary);
+  font-style: italic;
+  margin: 0;
+}
+
+// User links list
+.analytics-modal__list {
+  color: $color-5;
+  line-height: $line-height-relaxed;
+}
+
+// User link
+.analytics-modal__user-link {
+  color: $color-4;
+  text-decoration: none;
+  transition: color 0.2s ease;
+
+  &:hover {
+    text-decoration: underline;
+    color: color.adjust($color-4, $lightness: 10%);
+  }
+}
+
+// Zap list
+.analytics-modal__zap-list {
+  display: flex;
+  flex-direction: column;
+  gap: calc($gap / 2);
+}
+
+// Zap item
+.analytics-modal__zap-item {
+  color: $color-5;
+  line-height: $line-height-relaxed;
+}
+
+// Zap amount
+.analytics-modal__zap-amount {
+  color: $color-5; // White - non-interactive element
+  font-weight: 600;
+}
+
+// Zap message
+.analytics-modal__zap-message {
+  color: var(--color-text-secondary);
+  font-style: italic;
+  font-size: 14px;
+}
+
+// Emoji group (for likes)
+.analytics-modal__emoji-group {
+  margin-bottom: calc($gap / 2);
+  line-height: $line-height-relaxed;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+// Emoji icon
+.analytics-modal__emoji {
+  font-size: 18px;
+  margin-right: calc($gap / 4);
+}
+
+// Client info (bottom right)
+.analytics-modal__client {
+  text-align: right;
+  color: $color-3;
+  font-size: 0.75rem;
+  margin-top: $gap;
+  opacity: 0.8;
+}

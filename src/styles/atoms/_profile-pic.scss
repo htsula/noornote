@@ -1,0 +1,60 @@
+/**
+ * Profile Picture Atoms
+ * Reusable profile picture styles for avatars across the app
+ */
+
+@use '../abstracts/variables' as *;
+
+// Base profile picture
+.profile-pic {
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+
+  // Mini modifier (18x18px - used in thread context, mute list, etc.)
+  &--mini {
+    width: 18px;
+    height: 18px;
+  }
+
+  // Medium modifier (40x40px - used in note headers)
+  &--medium {
+    width: 40px;
+    height: 40px;
+    border: 1px solid rgba($color-4, 0.3);
+
+    // Responsive: smaller in ultra-compact containers
+    @container (max-width: 250px) {
+      width: 24px;
+      height: 24px;
+    }
+  }
+
+  // Big modifier (120x120px - used in profile views)
+  &--big {
+    width: 120px;
+    height: 120px;
+    border: 4px solid $color-1;
+    background-color: $color-2;
+
+    @media (max-width: 768px) {
+      width: 100px;
+      height: 100px;
+    }
+
+    @media (max-width: 480px) {
+      width: 80px;
+      height: 80px;
+      border-width: 3px;
+    }
+
+    &.clickable {
+      cursor: pointer;
+      transition: opacity 0.2s ease;
+
+      &:hover {
+        opacity: 0.9;
+      }
+    }
+  }
+}

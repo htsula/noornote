@@ -1,0 +1,206 @@
+/**
+ * Interaction Status Line (ISL) Component Styles
+ * Action buttons for Reply, Repost, Like, Zap
+ */
+
+@use '../abstracts/variables' as *;
+@use 'sass:color';
+
+.isl {
+  display: grid;
+  grid-template-columns: auto auto auto auto auto 1fr;
+  align-items: center;
+  gap: $gap;
+  padding: calc($gap / 2) 0;
+  margin-top: 0;
+  border-top: 1px solid $color-2;
+}
+
+.isl-action {
+  display: flex;
+  align-items: center;
+  gap: calc($gap / 2);
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: rgba($color-5, 0.6);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: $color-2;
+    color: $color-5;
+  }
+
+  &:active {
+    transform: scale(0.95);
+  }
+
+  // Disabled state (already interacted)
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+    pointer-events: none;
+
+    &:hover {
+      background: transparent;
+      color: rgba($color-5, 0.6);
+    }
+  }
+}
+
+.isl-icon {
+  font-size: 19px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+
+  svg {
+    width: 18px;
+    height: 18px;
+    stroke: currentColor;
+  }
+}
+
+.isl-quote .isl-icon {
+  font-size: 24px;
+}
+
+.isl-count {
+  font-size: 14px;
+  font-weight: 500;
+  min-width: 20px;
+  text-align: left;
+}
+
+// Specific action colors on hover
+.isl-reply:hover {
+  color: #3b82f6; // Blue
+}
+
+.isl-zap:hover {
+  color: #f59e0b; // Orange/Yellow
+}
+
+.isl-repost:hover {
+  color: #10b981; // Green
+}
+
+.isl-quote:hover {
+  color: #8b5cf6; // Purple
+}
+
+.isl-like:hover {
+  color: #ef4444; // Red
+
+  .isl-icon {
+    font-size: 0; // Hide original heart
+
+    &::before {
+      content: '♥';
+      font-size: 19px; // Show filled heart
+    }
+  }
+}
+
+.isl-analytics {
+  justify-self: end; // Push to the right in grid
+  font-size: 14px;
+  padding: calc($gap / 4) calc($gap / 2);
+
+  &:hover {
+    color: $color-4;
+  }
+}
+
+// Active states (when user has interacted)
+.isl-action.active {
+  color: $color-5;
+
+  &.isl-reply {
+    color: #3b82f6;
+  }
+
+  &.isl-zap {
+    color: #f59e0b;
+  }
+
+  &.isl-repost {
+    color: #10b981;
+  }
+
+  &.isl-quote {
+    color: #8b5cf6;
+  }
+
+  &.isl-like {
+    color: #ef4444;
+
+    .isl-icon {
+      font-size: 0;
+
+      &::before {
+        content: '♥'; // Filled heart when liked
+        font-size: 19px;
+      }
+    }
+
+    // Keep red color when disabled (already liked)
+    &:disabled {
+      opacity: 1;
+      color: #ef4444;
+    }
+  }
+}
+
+// Zapped state (yellow filled icon + amount badge)
+.isl-zap.zapped {
+  color: #f59e0b !important;
+
+  .isl-icon svg {
+    fill: #f59e0b;
+    stroke: none;
+  }
+
+  .zap-amount-badge {
+    color: #f59e0b;
+    font-weight: 600;
+    font-size: 12px;
+    margin-left: calc($gap / 4);
+    padding: 2px calc($gap / 4);
+    background: rgba(#f59e0b, 0.1);
+    border-radius: 4px;
+  }
+}
+
+// Disabled state (no Lightning wallet)
+.isl-zap.disabled {
+  opacity: 0.3;
+  pointer-events: none;
+  cursor: not-allowed;
+}
+
+// Loading state (spinner during payment)
+.isl-action.loading {
+  pointer-events: none;
+  opacity: 0.7;
+
+  .spinner {
+    animation: spin 1s linear infinite;
+  }
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}

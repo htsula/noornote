@@ -1,0 +1,40 @@
+/**
+ * RawEventModal Component Styles
+ * Displays raw Nostr event JSON with copy functionality
+ */
+
+@use '../abstracts/variables' as *;
+@use '../abstracts/mixins' as *;
+
+.raw-event-modal {
+  display: flex;
+  flex-direction: column;
+  gap: $gap;
+  height: 100%;
+
+  &__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: calc($gap / 2);
+  }
+
+  &__code {
+    flex: 1;
+    margin: 0;
+    padding: $gap;
+    background: var(--color-bg-secondary);
+    border-radius: 8px;
+    overflow: auto;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    line-height: 1.5;
+
+    // Custom scrollbar styling
+    @include custom-scrollbar;
+
+    code {
+      color: var(--color-text-primary);
+      white-space: pre;
+    }
+  }
+}

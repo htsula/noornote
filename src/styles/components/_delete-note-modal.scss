@@ -1,0 +1,62 @@
+/**
+ * DeleteNoteModal Component Styles
+ * NIP-09 deletion interface
+ */
+
+@use '../abstracts/variables' as *;
+
+.delete-note-modal {
+  display: flex;
+  flex-direction: column;
+  gap: calc($gap * 1.5);
+
+  &__content {
+    display: flex;
+    flex-direction: column;
+    gap: $gap;
+  }
+
+  &__warning {
+    margin: 0;
+    padding: $gap;
+    background: var(--color-bg-secondary);
+    border-radius: var(--border-radius);
+    color: var(--color-text-primary);
+    font-size: var(--font-size-base);
+    line-height: 1.5;
+    font-weight: 500;
+  }
+
+  &__disclaimer {
+    margin: 0;
+    padding: $gap;
+    background: var(--color-bg-secondary);
+    border-left: 3px solid var(--color-warning);
+    border-radius: var(--border-radius);
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    line-height: 1.5;
+  }
+
+  &__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: $gap;
+    padding-top: $gap;
+  }
+}
+
+// Mobile responsiveness
+@media (max-width: 768px) {
+  .delete-note-modal {
+    gap: $gap;
+
+    &__actions {
+      flex-direction: column-reverse;
+
+      .btn {
+        width: 100%;
+      }
+    }
+  }
+}

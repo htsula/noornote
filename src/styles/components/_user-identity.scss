@@ -1,0 +1,74 @@
+/**
+ * UserIdentity Component Styles
+ * Username + Avatar display with size variants
+ */
+
+@use '../abstracts/variables' as *;
+
+.user-identity {
+  display: inline-flex;
+  align-items: center;
+  gap: calc($gap / 2);
+}
+
+.user-identity__avatar {
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.user-identity__username {
+  font-weight: 500;
+  color: $color-5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// Size variants
+.user-identity--small {
+  .user-identity__avatar {
+    width: 24px;
+    height: 24px;
+  }
+
+  .user-identity__username {
+    font-size: 14px;
+  }
+}
+
+.user-identity--medium {
+  .user-identity__avatar {
+    width: 32px;
+    height: 32px;
+  }
+
+  .user-identity__username {
+    font-size: 15px;
+  }
+}
+
+.user-identity--large {
+  .user-identity__avatar {
+    width: 48px;
+    height: 48px;
+  }
+
+  .user-identity__username {
+    font-size: 16px;
+  }
+}
+
+// Clickable state
+.user-identity--clickable {
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+
+  &:hover {
+    opacity: 0.8;
+  }
+
+  &:active {
+    opacity: 0.6;
+  }
+}

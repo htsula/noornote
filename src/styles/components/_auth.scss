@@ -1,0 +1,173 @@
+/**
+ * Authentication Component Styles
+ */
+
+@use '../abstracts/variables' as *;
+@use '../abstracts/mixins' as *;
+
+.auth-component {
+  // Compact auth UI for sidebar footer
+  .auth-container {
+    width: 100%;
+    // Button styles moved to molecules/_buttons.scss
+  }
+
+  .auth-status {
+    text-align: center;
+  }
+
+  .auth-error {
+    margin-top: $gap;
+    padding: $gap;
+    background: rgba(255, 107, 107, 0.1);
+    border: 1px solid #ff6b6b;
+    border-radius: 4px;
+  }
+}
+
+// Authenticated content styles
+.authenticated-content {
+  height: 100%;
+  @include flex-column;
+
+  .timeline-container {
+    flex: 1;
+    overflow: hidden;
+  }
+}
+
+// User status (standalone)
+.user-status {
+  @include flex-between;
+  padding: $gap;
+  border-bottom: 1px solid $color-2;
+  background: $color-1;
+}
+
+// User info (standalone - within auth)
+.auth-user-info {
+  @include flex-center;
+  gap: calc($gap / 2);
+  margin-bottom: $gap;
+}
+
+// User indicator (standalone)
+.user-indicator {
+  font-size: 12px;
+}
+
+// User npub (standalone)
+.user-npub {
+  font-family: monospace;
+  font-size: 14px;
+  color: $color-4;
+}
+
+// Auth npub (within auth status)
+.auth-npub {
+  font-family: $font-family-mono;
+  font-size: 14px;
+  color: $color-4;
+  word-break: break-all;
+  margin: calc($gap / 2) 0;
+}
+
+// Auth extension (standalone)
+.auth-extension {
+  font-size: 13px;
+  color: $color-5;
+  opacity: 0.7;
+}
+
+// Auth error text (standalone)
+.auth-error-text {
+  color: #ff6b6b;
+  margin: 0;
+}
+
+// No extension error (standalone)
+.no-extension-error {
+  color: #ff6b6b;
+  font-weight: bold;
+  margin-bottom: $gap;
+}
+
+// Extension list (standalone)
+.extension-list {
+  list-style: none;
+  padding: 0;
+  margin: $gap 0;
+}
+
+// Extension list item (standalone)
+.extension-list-item {
+  margin: calc($gap / 2) 0;
+}
+
+// Extension link (standalone)
+.extension-link {
+  color: $color-4;
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+// Retry button (standalone)
+.retry-btn {
+  background: transparent;
+  color: $color-4;
+  border: 1px solid $color-4;
+  padding: calc($gap / 2) $gap;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  margin-top: $gap;
+
+  &:hover {
+    background: $color-4;
+    color: $color-1;
+  }
+}
+
+// Logout button (standalone)
+.logout-btn {
+  background: transparent;
+  color: $color-4;
+  border: 1px solid $color-4;
+  padding: calc($gap * 0.375) calc($gap * 0.75);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+
+  &:hover {
+    background: $color-4;
+    color: $color-1;
+  }
+}
+
+// Auth container styles
+.auth-container {
+  padding: $gap * 2;
+  text-align: center;
+}
+
+// Auth container heading
+.auth-container-heading {
+  margin: 0 0 $gap 0;
+  color: $color-5;
+}
+
+// Auth container text
+.auth-container-text {
+  margin: 0 0 $gap * 2 0;
+  color: $color-5;
+  opacity: 0.8;
+}
+
+// Auth status heading
+.auth-status-heading {
+  margin: 0 0 $gap 0;
+  color: $color-5;
+}

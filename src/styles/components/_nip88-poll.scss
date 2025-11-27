@@ -1,0 +1,115 @@
+/**
+ * NIP-88 Poll Display (kind:1068)
+ * Styles for rendered polls in timeline/single note view
+ */
+
+@use '../abstracts/variables' as *;
+@use '../abstracts/mixins' as *;
+
+.nip88-poll {
+  margin-top: $gap;
+  padding: $gap;
+  background: rgba($color-2, 0.3);
+  border: 1px solid $color-2;
+  border-radius: calc($gap / 2);
+
+  &__meta {
+    display: flex;
+    gap: $gap;
+    margin-bottom: $gap;
+    font-size: 14px;
+    color: $color-3;
+  }
+
+  &__meta-item {
+    display: inline-flex;
+    align-items: center;
+    gap: calc($gap / 4);
+
+    &--expired {
+      color: rgba($color-6, 0.5);
+    }
+  }
+
+  &__options {
+    display: flex;
+    flex-direction: column;
+    gap: calc($gap / 2);
+  }
+
+  &__option {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: calc($gap * 0.75);
+    background: $color-1;
+    border: 1px solid $color-2;
+    border-radius: calc($gap / 4);
+    color: $color-6;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    overflow: hidden;
+
+    &:hover:not(:disabled) {
+      border-color: $color-4;
+      background: rgba($color-2, 0.3);
+    }
+
+    &:active:not(:disabled) {
+      transform: scale(0.98);
+    }
+
+    &:disabled {
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+
+    &--voted {
+      border-color: $color-4;
+      background: rgba($color-4, 0.1);
+
+      .nip88-poll__option-bar {
+        background: linear-gradient(90deg, rgba($color-4, 0.3), rgba($color-4, 0.1));
+      }
+    }
+  }
+
+  &__option-label {
+    position: relative;
+    z-index: 2;
+    font-weight: 500;
+  }
+
+  &__option-stats {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    gap: $gap;
+    font-size: 14px;
+    color: $color-4;
+  }
+
+  &__option-count {
+    min-width: 4rem;
+    text-align: right;
+  }
+
+  &__option-percentage {
+    min-width: 3rem;
+    font-weight: 600;
+    color: $color-5;
+  }
+
+  &__option-bar {
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background: linear-gradient(90deg, rgba($color-3, 0.2), rgba($color-3, 0.05));
+    border-radius: calc($gap / 4);
+    transition: width 0.3s ease;
+    z-index: 1;
+  }
+}

@@ -1,0 +1,28 @@
+@use '../abstracts/variables' as *;
+
+.auth-required-modal {
+  text-align: center;
+  padding: $gap;
+
+  &__icon {
+    font-size: 48px;
+    margin-bottom: $gap;
+  }
+
+  h3 {
+    margin: 0 0 calc($gap / 2) 0;
+    font-size: 20px;
+    color: $color-6;
+  }
+
+  p {
+    margin: 0 0 calc($gap * 1.5) 0;
+    color: $color-4;
+  }
+
+  &__actions {
+    display: flex;
+    justify-content: center;
+    gap: calc($gap / 2);
+  }
+}

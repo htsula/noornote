@@ -1,0 +1,338 @@
+/**
+ * ZapManager
+ * Handles zap interactions for InteractionStatusLine:
+ * - Quick Zap (click)
+ * - Custom Zap Modal (long-press)
+ * - Button state updates (yellow icon, amount badge, loading spinner)
+ */
+
+import { AuthGuard } from '../../../services/AuthGuard';
+import { AuthService } from '../../../services/AuthService';
+import { ZapService } from '../../../services/ZapService';
+import { ToastService } from '../../../services/ToastService';
+import { StatsUpdateService } from '../../../services/StatsUpdateService';
+import { EventBus } from '../../../services/EventBus';
+import { UserProfileService } from '../../../services/UserProfileService';
+
+export interface ZapManagerConfig {
+  noteId: string;
+  authorPubkey: string;
+  onStatsUpdate?: (zaps: number) => void;
+  onCustomZap?: () => void;
+}
+
+export class ZapManager {
+  private config: ZapManagerConfig;
+  private zapService: ZapService;
+  private authService: AuthService;
+  private statsUpdateService: StatsUpdateService;
+  private eventBus: EventBus;
+  private userProfileService: UserProfileService;
+  private zapButton: HTMLElement | null = null;
+  private hasZapped: boolean = false;
+  private zappedAmount: number = 0;
+  private canReceiveZaps: boolean = true; // Assume true until checked
+
+  constructor(config: ZapManagerConfig) {
+    this.config = config;
+    this.zapService = ZapService.getInstance();
+    this.authService = AuthService.getInstance();
+    this.statsUpdateService = StatsUpdateService.getInstance();
+    this.eventBus = EventBus.getInstance();
+    this.userProfileService = UserProfileService.getInstance();
+  }
+
+  /**
+   * Set zap button element reference
+   */
+  public setButtonElement(button: HTMLElement): void {
+    this.zapButton = button;
+  }
+
+  /**
+   * Check if current user has already zapped this note
+   * Uses ZapService to get zap amount from localStorage
+   */
+  public async checkZappedStatus(): Promise<void> {
+    try {
+      const currentUser = this.authService.getCurrentUser();
+      if (!currentUser) return;
+
+      const zapAmount = this.zapService.getUserZapAmount(this.config.noteId);
+
+      if (zapAmount > 0) {
+        this.hasZapped = true;
+        this.zappedAmount = zapAmount;
+        this.updateButtonState(true);
+      }
+    } catch (error) {
+      console.warn('Failed to check zapped status:', error);
+    }
+  }
+
+  /**
+   * Check if recipient has Lightning wallet configured (lud16/lud06)
+   * Disables zap button if no wallet found
+   */
+  public async checkRecipientCanReceiveZaps(): Promise<void> {
+    try {
+      const profile = await this.userProfileService.getUserProfile(this.config.authorPubkey);
+
+      if (!profile || (!profile.lud16 && !profile.lud06)) {
+        this.canReceiveZaps = false;
+        this.disableZapButton();
+      }
+    } catch (error) {
+      // On error, leave button enabled (fail open)
+      console.warn('Failed to check recipient zap capability:', error);
+    }
+  }
+
+  /**
+   * Disable zap button (no Lightning wallet)
+   */
+  private disableZapButton(): void {
+    if (!this.zapButton) return;
+
+    this.zapButton.classList.add('disabled');
+    this.zapButton.setAttribute('disabled', 'true');
+    this.zapButton.title = 'This user has no Lightning wallet configured';
+  }
+
+  /**
+   * Handle quick zap action
+   */
+  public async handleQuickZap(): Promise<void> {
+    if (!AuthGuard.requireAuth('zap this note')) {
+      return;
+    }
+
+    if (!this.checkCanZap()) {
+      return;
+    }
+
+    await this.sendQuickZap();
+  }
+
+  /**
+   * Handle custom zap action (long-press)
+   */
+  public handleCustomZap(): void {
+    if (!AuthGuard.requireAuth('send custom zap')) {
+      return;
+    }
+
+    if (!this.checkCanZap()) {
+      return;
+    }
+
+    // Use custom handler if provided, otherwise open modal
+    if (this.config.onCustomZap) {
+      this.config.onCustomZap();
+    } else {
+      this.openCustomZapModal();
+    }
+  }
+
+  /**
+   * Check if user can zap this note
+   */
+  private checkCanZap(): boolean {
+    if (!this.canReceiveZaps) {
+      ToastService.show('This user has no Lightning wallet configured', 'info');
+      return false;
+    }
+
+    const currentUser = this.authService.getCurrentUser();
+    if (currentUser && this.config.authorPubkey === currentUser.pubkey) {
+      ToastService.show('You cannot zap your own notes', 'info');
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Send Quick Zap with default settings
+   */
+  private async sendQuickZap(): Promise<void> {
+    try {
+      this.updateButtonLoading(true);
+
+      const result = await this.zapService.sendQuickZap(
+        this.config.noteId,
+        this.config.authorPubkey
+      );
+
+      this.updateButtonLoading(false);
+
+      if (result.success && result.amount) {
+        this.hasZapped = true;
+        this.zappedAmount = this.zapService.getUserZapAmount(this.config.noteId);
+        this.updateButtonState(true);
+
+        // Update stats
+        if (this.config.onStatsUpdate) {
+          this.config.onStatsUpdate(result.amount);
+        }
+
+        // Emit event for ZapsList refresh
+        this.eventBus.emit('zap:added', { noteId: this.config.noteId });
+
+        // Cache invalidation
+        this.statsUpdateService.updateAfterInteraction(this.config.noteId, 'zap', null);
+      }
+    } catch (error) {
+      console.error('❌ Failed to send zap:', error);
+      this.updateButtonLoading(false);
+    }
+  }
+
+  /**
+   * Open Custom Zap Modal
+   */
+  private async openCustomZapModal(): Promise<void> {
+    const { ZapModal } = await import('../../modals/ZapModal');
+
+    const zapModal = new ZapModal({
+      noteId: this.config.noteId,
+      authorPubkey: this.config.authorPubkey,
+      onZapSent: (amount: number) => {
+        this.hasZapped = true;
+        this.zappedAmount = this.zapService.getUserZapAmount(this.config.noteId);
+        this.updateButtonState(true);
+
+        // Update stats
+        if (this.config.onStatsUpdate) {
+          this.config.onStatsUpdate(amount);
+        }
+
+        // Emit event for ZapsList refresh
+        this.eventBus.emit('zap:added', { noteId: this.config.noteId });
+
+        // Cache invalidation
+        this.statsUpdateService.updateAfterInteraction(this.config.noteId, 'zap', null);
+      }
+    });
+
+    zapModal.show();
+  }
+
+  /**
+   * Update zap button visual state (yellow icon + amount badge)
+   */
+  private updateButtonState(zapped: boolean): void {
+    if (!this.zapButton) return;
+
+    const zapIcon = this.zapButton.querySelector('.isl-icon');
+
+    if (zapIcon) {
+      if (zapped && this.zappedAmount > 0) {
+        this.zapButton.classList.add('active', 'zapped');
+
+        let amountBadge = this.zapButton.querySelector('.zap-amount-badge') as HTMLElement;
+        if (!amountBadge) {
+          amountBadge = document.createElement('span');
+          amountBadge.className = 'zap-amount-badge';
+          zapIcon.insertAdjacentElement('afterend', amountBadge);
+        }
+        amountBadge.textContent = this.zappedAmount.toString();
+      } else {
+        this.zapButton.classList.remove('active', 'zapped');
+
+        const amountBadge = this.zapButton.querySelector('.zap-amount-badge');
+        if (amountBadge) {
+          amountBadge.remove();
+        }
+      }
+    }
+  }
+
+  /**
+   * Update zap button loading state (spinner during payment)
+   */
+  private updateButtonLoading(loading: boolean): void {
+    if (!this.zapButton) return;
+
+    const zapIcon = this.zapButton.querySelector('.isl-icon');
+
+    if (zapIcon) {
+      if (loading) {
+        this.zapButton.classList.add('loading');
+        zapIcon.innerHTML = `
+          <svg width="18" height="18" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" class="spinner">
+            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" fill="none" opacity="0.25"/>
+            <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round"/>
+          </svg>
+        `;
+      } else {
+        this.zapButton.classList.remove('loading');
+        zapIcon.innerHTML = `
+          <svg width="18" height="18" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M8.5 1L3 9h5l-.5 6 5.5-8h-5l.5-6z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+          </svg>
+        `;
+      }
+    }
+  }
+
+  /**
+   * Attach long-press event listeners to zap button
+   */
+  public attachEventListeners(zapButton: HTMLElement): void {
+    this.setButtonElement(zapButton);
+
+    let longPressTimer: number | null = null;
+    let isLongPress = false;
+
+    const startLongPress = () => {
+      isLongPress = false;
+      longPressTimer = window.setTimeout(() => {
+        isLongPress = true;
+        this.handleCustomZap();
+      }, 1000); // 1 second long-press
+    };
+
+    const cancelLongPress = () => {
+      if (longPressTimer) {
+        window.clearTimeout(longPressTimer);
+        longPressTimer = null;
+      }
+    };
+
+    // Mouse events
+    zapButton.addEventListener('mousedown', (e) => {
+      e.stopPropagation();
+      startLongPress();
+    });
+
+    zapButton.addEventListener('mouseup', (e) => {
+      e.stopPropagation();
+      cancelLongPress();
+      if (!isLongPress) {
+        this.handleQuickZap();
+      }
+    });
+
+    zapButton.addEventListener('mouseleave', () => {
+      cancelLongPress();
+    });
+
+    // Touch events
+    zapButton.addEventListener('touchstart', (e) => {
+      e.stopPropagation();
+      startLongPress();
+    });
+
+    zapButton.addEventListener('touchend', (e) => {
+      e.stopPropagation();
+      cancelLongPress();
+      if (!isLongPress) {
+        this.handleQuickZap();
+      }
+    });
+
+    zapButton.addEventListener('touchcancel', () => {
+      cancelLongPress();
+    });
+  }
+}

@@ -1,0 +1,472 @@
+/**
+ * Main Layout Template
+ * CSS Grid-based 3-column layout: Sidebar + Primary + Secondary
+ */
+
+@use 'sass:color';
+@use '../abstracts/variables' as *;
+@use '../abstracts/mixins' as *;
+
+.main-layout {
+  display: grid;
+  grid-template-columns: 200px 1fr 1fr;
+  grid-template-areas: "sidebar primary secondary";
+  gap: $gap;
+  padding: $gap;
+  height: 100vh;
+  box-sizing: border-box;
+  overflow: hidden;
+
+  // Responsive breakpoints
+  @include desktop-down {
+    grid-template-columns: 100px 1fr 1fr;
+    gap: $gap;
+    padding: $gap;
+  }
+
+  @include tablet-down {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr 1fr;
+    grid-template-areas:
+      "sidebar"
+      "primary"
+      "secondary";
+    gap: calc($gap / 2);
+    padding: calc($gap / 2);
+  }
+
+  @include mobile-down {
+    padding: calc($gap / 4);
+    gap: calc($gap / 4);
+  }
+}
+
+// Layout areas
+.sidebar {
+  grid-area: sidebar;
+  min-width: 0;
+  overflow: hidden; // Sidebar stays fixed, no scroll
+}
+
+.primary-content {
+  grid-area: primary;
+  min-width: 0;
+  overflow-y: auto; // Independent vertical scroll
+  overflow-x: hidden;
+  height: 100%;
+  @include custom-scrollbar;
+
+  > * {
+    padding: 0 calc($gap) 0 0;
+  }
+}
+
+.secondary-content {
+  grid-area: secondary;
+  min-width: 0;
+  overflow-y: auto; // Independent vertical scroll for manual override
+  overflow-x: hidden;
+  height: 100%;
+
+  .secondary-user {
+    padding: 0;
+    border-bottom: 1px solid $color-2;
+  }
+
+  .secondary-tabs {
+    display: flex;
+    gap: calc($gap / 2);
+    border-bottom: 1px solid $color-2;
+  }
+
+  .secondary-tab {
+    background: none;
+    border: none;
+    padding: calc($gap / 2) $gap;
+    font-size: 14px;
+    color: $color-4;
+    cursor: pointer;
+    transition: color 0.2s ease;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    gap: calc($gap / 2);
+
+    &:hover {
+      background: color.adjust($color-2, $lightness: 5%);
+    }
+
+    &--active {
+      color: $color-5;
+      font-weight: 600;
+    }
+
+    // List tabs with close button
+    &--list {
+      .secondary-tab__label {
+        flex: 1;
+      }
+
+      .secondary-tab__close {
+        background: none;
+        border: none;
+        padding: 0;
+        cursor: pointer;
+        color: $color-4;
+        transition: color 0.2s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+
+        svg {
+          width: 14px;
+          height: 14px;
+        }
+
+        &:hover {
+          color: $color-5;
+        }
+      }
+    }
+  }
+
+  .secondary-content-body {
+    height: calc(100% - 120px);
+    overflow: hidden;
+    position: relative;
+  }
+
+  .secondary-tab-content {
+    display: none;
+    height: 100%;
+    overflow-y: auto;
+    @include custom-scrollbar;
+
+    &--active {
+      display: block;
+    }
+  }
+
+  // Empty/loading states (shared by all lists)
+  .bookmarks-empty-state,
+  .follows-empty-state,
+  .mutes-empty-state {
+    padding: calc($gap * 2);
+    text-align: center;
+    color: $color-5;
+  }
+
+  // Loading states with pulsate animation
+  .bookmarks-loading,
+  .follows-loading,
+  .follows-list-loading,
+  .mutes-loading {
+    padding: calc($gap * 2);
+    text-align: center;
+    color: $color-5;
+    animation: pulsate 2.5s ease-in-out infinite;
+  }
+
+  .bookmarks-list,
+  .follows-list,
+  .mutes-list {
+    padding: $gap 0;
+  }
+
+  // List sync controls (used by Bookmarks, Follows, Muted Users)
+  .list-sync-controls {
+    display: flex;
+    gap: calc($gap / 2);
+    flex-wrap: wrap;
+    padding: $gap 0;
+    border-bottom: 1px solid $color-2;
+  }
+
+  .list-sync-info {
+    padding: calc($gap / 2) 0;
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.4;
+    color: $color-3;
+    text-align: left;
+    border-bottom: 1px solid $color-2;
+  }
+
+  .bookmark-item {
+    display: flex;
+    align-items: center;
+    gap: $gap;
+    padding: $gap;
+    border-bottom: 1px solid $color-2;
+    transition: background 0.2s ease;
+
+    &:hover {
+      background: color.adjust($color-2, $lightness: 5%);
+    }
+
+    &__content-wrapper {
+      flex: 1;
+      cursor: pointer;
+    }
+
+    &__author {
+      font-weight: 600;
+      color: $color-5;
+      margin-bottom: calc($gap / 4);
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: calc($gap / 2);
+    }
+
+    &__content {
+      color: $color-5;
+      margin-bottom: calc($gap / 4);
+      font-size: 14px;
+      line-height: 1.4;
+    }
+
+    &__timestamp {
+      font-size: 12px;
+      color: color.adjust($color-5, $lightness: -20%);
+    }
+
+    &__delete {
+      background: none;
+      border: none;
+      padding: calc($gap / 2);
+      cursor: pointer;
+      color: color.adjust($color-5, $lightness: -30%);
+      transition: color 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+
+      &:hover {
+        color: $color-4;
+      }
+
+      svg {
+        display: block;
+      }
+    }
+  }
+
+  // Follows header (sticky with stats and filter)
+  .follows-header {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: $gap;
+    padding: calc($gap / 2) 0;
+    border-bottom: 1px solid color.adjust($color-2, $lightness: 10%);
+    background: $color-1;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  .follows-stats {
+    font-size: 13px;
+    font-weight: 600;
+    color: $color-5;
+    white-space: nowrap;
+  }
+
+  .follows-filter {
+    label {
+      display: flex;
+      align-items: center;
+      gap: calc($gap / 4);
+      font-size: 12px;
+      color: $color-3;
+      cursor: pointer;
+      white-space: nowrap;
+
+      &:hover {
+        color: $color-4;
+      }
+    }
+
+    &__toggle {
+      cursor: pointer;
+      accent-color: $color-4;
+    }
+  }
+
+  // Follow item (similar to bookmark-item)
+  .follow-item {
+    display: flex;
+    align-items: center;
+    gap: $gap;
+    padding: $gap 0;
+    border-bottom: 1px solid $color-2;
+    transition: background 0.2s ease;
+
+    &:hover {
+      background: color.adjust($color-2, $lightness: 5%);
+    }
+
+    &__content-wrapper {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: $gap;
+      cursor: pointer;
+    }
+
+    &__avatar {
+      flex-shrink: 0;
+    }
+
+    &__info {
+      gap: calc($gap / 4);
+    }
+
+    &__username {
+      font-weight: 600;
+      color: $color-5;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: calc($gap / 2);
+    }
+
+    &__petname {
+      font-size: 12px;
+      color: color.adjust($color-5, $lightness: -20%);
+    }
+
+    &__unfollow-btn {
+      flex-shrink: 0;
+    }
+  }
+
+  // Mute item (similar to bookmark-item)
+  .mute-item {
+    display: flex;
+    align-items: center;
+    gap: $gap;
+    padding: $gap;
+    border-bottom: 1px solid $color-2;
+    transition: background 0.2s ease;
+
+    &:hover {
+      background: color.adjust($color-2, $lightness: 5%);
+    }
+
+    &__content-wrapper {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: $gap;
+      cursor: pointer;
+    }
+
+    &__avatar {
+      flex-shrink: 0;
+    }
+
+    &__info {
+      flex: 1;
+    }
+
+    &__username {
+      font-weight: 600;
+      color: $color-5;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: calc($gap / 2);
+    }
+
+    &__unmute-btn {
+      flex-shrink: 0;
+    }
+
+    // Thread-specific styles
+    &--thread {
+      .mute-item__content-wrapper {
+        cursor: pointer;
+      }
+    }
+
+    &__thread-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      background: color.adjust($color-2, $lightness: 5%);
+      border-radius: $radius-sm;
+      color: $color-warning;
+      flex-shrink: 0;
+    }
+
+    &__event-id {
+      font-family: monospace;
+      font-size: 13px;
+      color: $color-3;
+      display: flex;
+      align-items: center;
+      gap: calc($gap / 2);
+    }
+
+    &__thread-content {
+      font-size: 13px;
+      color: $color-5;
+      line-height: 1.4;
+      display: flex;
+      align-items: center;
+      gap: calc($gap / 2);
+      word-break: break-word;
+    }
+  }
+
+  // Mute sections (Users / Threads)
+  .mute-section {
+    margin-bottom: $gap * 1.5;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+
+    &__header {
+      display: flex;
+      align-items: center;
+      gap: calc($gap / 2);
+      padding: calc($gap / 2) $gap;
+      border-bottom: 1px solid color.adjust($color-2, $lightness: 10%);
+      margin-bottom: calc($gap / 2);
+    }
+
+    &__title {
+      font-size: 13px;
+      font-weight: 600;
+      color: $color-3;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    &__count {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 18px;
+      height: 18px;
+      padding: 0 5px;
+      background: $color-4;
+      color: $color-1;
+      border-radius: 9px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+  }
+
+  // Scrollbar styling - MUST be last to override any conflicting styles
+  @include custom-scrollbar;
+}

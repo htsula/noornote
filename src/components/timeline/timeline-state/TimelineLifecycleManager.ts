@@ -1,0 +1,113 @@
+/**
+ * TimelineLifecycleManager - Manages timeline lifecycle
+ * Handles pause/resume/destroy operations for background tasks
+ * Extracts from: TimelineUI.pause(), resume(), destroy()
+ */
+
+import { FeedOrchestrator, type NewNotesInfo } from '../../../services/orchestration/FeedOrchestrator';
+import { InfiniteScroll } from '../../ui/InfiniteScroll';
+import { RefreshButton } from '../../ui/RefreshButton';
+import { CustomDropdown } from '../../ui/CustomDropdown';
+import { NoteHeader } from '../../ui/NoteHeader';
+
+export class TimelineLifecycleManager {
+  private feedOrchestrator: FeedOrchestrator;
+  private infiniteScroll: InfiniteScroll;
+  private refreshButton: RefreshButton | null = null;
+  private viewDropdown: CustomDropdown | null = null;
+  private noteHeaders: Map<string, NoteHeader> = new Map();
+
+  constructor(feedOrchestrator: FeedOrchestrator, infiniteScroll: InfiniteScroll) {
+    this.feedOrchestrator = feedOrchestrator;
+    this.infiniteScroll = infiniteScroll;
+  }
+
+  /**
+   * Set refresh button instance
+   */
+  setRefreshButton(button: RefreshButton): void {
+    this.refreshButton = button;
+  }
+
+  /**
+   * Set view dropdown instance
+   */
+  setViewDropdown(dropdown: CustomDropdown): void {
+    this.viewDropdown = dropdown;
+  }
+
+  /**
+   * Add note header for cleanup tracking
+   */
+  addNoteHeader(noteId: string, header: NoteHeader): void {
+    this.noteHeaders.set(noteId, header);
+  }
+
+  /**
+   * Pause background tasks (polling, subscriptions) when navigating away
+   */
+  pause(): void {
+    this.feedOrchestrator.stopPolling();
+    this.infiniteScroll.disconnect();
+  }
+
+  /**
+   * Resume background tasks when returning to timeline
+   */
+  resume(
+    followingPubkeys: string[],
+    newestTimestamp: number,
+    onNewNotes: (info: NewNotesInfo) => void,
+    includeReplies: boolean,
+    loadTrigger: HTMLElement | null,
+    selectedRelay: string | null = null,
+    exemptFromMuteFilter?: string
+  ): void {
+    // Restart polling if we have events
+    if (newestTimestamp > 0) {
+      this.feedOrchestrator.startPolling(
+        followingPubkeys,
+        newestTimestamp,
+        onNewNotes,
+        includeReplies,
+        60000,
+        selectedRelay,
+        exemptFromMuteFilter
+      );
+    }
+
+    // Restart infinite scroll observer
+    if (loadTrigger) {
+      this.infiniteScroll.observe(loadTrigger);
+    }
+  }
+
+  /**
+   * Cleanup resources
+   */
+  destroy(): void {
+    // Stop polling
+    this.feedOrchestrator.stopPolling();
+
+    // Disconnect infinite scroll
+    this.infiniteScroll.disconnect();
+
+    // Cleanup all note headers
+    this.noteHeaders.forEach(noteHeader => {
+      noteHeader.destroy();
+    });
+    this.noteHeaders.clear();
+
+    // Cleanup refresh button
+    if (this.refreshButton) {
+      this.refreshButton.destroy();
+      this.refreshButton = null;
+    }
+
+    // Cleanup view dropdown
+    if (this.viewDropdown) {
+      this.viewDropdown.destroy();
+      this.viewDropdown = null;
+    }
+  }
+}

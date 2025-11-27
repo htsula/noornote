@@ -1,0 +1,147 @@
+/**
+ * NostrToolsAdapter
+ * Compatibility layer for Nostr cryptographic operations
+ *
+ * @purpose Re-export Nostr functions for legacy code compatibility
+ * @status 100% NDK-based migration
+ *
+ * ARCHITECTURE NOTE:
+ * - All relay operations use NDK (NostrTransport.ts)
+ * - Crypto functions imported from nostr-tools (NDK's peer dependency)
+ * - NDK uses nostr-tools internally but doesn't re-export crypto functions
+ * - This is NOT adding nostr-tools as OUR dependency - it's using NDK's
+ */
+
+import { nip19 } from '@nostr-dev-kit/ndk';
+import type { UnsignedEvent, NostrEvent } from '@nostr-dev-kit/ndk';
+import { hexToBytes, bytesToHex } from '@noble/hashes/utils';
+
+// Low-level crypto functions from nostr-tools (NDK's peer dependency)
+// NDK uses these internally but doesn't expose them in public API
+import { getPublicKey, finalizeEvent, verifyEvent, nip04, getEventHash } from 'nostr-tools';
+
+// ============= TYPE EXPORTS =============
+
+export type { NostrEvent as Event, UnsignedEvent };
+export type { NDKFilter as Filter } from '@nostr-dev-kit/ndk';
+
+// ============= BYTE CONVERSION =============
+
+/**
+ * Convert hex string to Uint8Array
+ * Used for cryptographic operations
+ */
+export { hexToBytes };
+
+/**
+ * Convert Uint8Array to hex string
+ * Used for cryptographic operations
+ */
+export { bytesToHex };
+
+// ============= NIP-19 FUNCTIONS =============
+
+/**
+ * Decode any NIP-19 encoded string (npub/nsec/nevent/naddr/note)
+ */
+export function decodeNip19(encoded: string): nip19.DecodeResult {
+  return nip19.decode(encoded);
+}
+
+/**
+ * Encode hex pubkey to npub
+ */
+export function encodeNpub(pubkey: string): string {
+  return nip19.npubEncode(pubkey);
+}
+
+/**
+ * Encode event ID to nevent (with optional relay hints and author)
+ */
+export function encodeNevent(eventId: string, relays?: string[], author?: string): string {
+  return nip19.neventEncode({
+    id: eventId,
+    relays: relays || [],
+    author
+  });
+}
+
+/**
+ * Encode long-form content address to naddr
+ */
+export function encodeNaddr(params: {
+  pubkey: string;
+  kind: number;
+  identifier: string;
+  relays?: string[];
+}): string {
+  return nip19.naddrEncode({
+    pubkey: params.pubkey,
+    kind: params.kind,
+    identifier: params.identifier,
+    relays: params.relays || []
+  });
+}
+
+/**
+ * Encode hex private key to nsec
+ */
+export function encodeNsec(privateKey: string): string {
+  return nip19.nsecEncode(privateKey);
+}
+
+// ============= EVENT SIGNING =============
+
+/**
+ * Derive public key from private key
+ */
+export function getPublicKeyFromPrivate(privateKeyHex: string): string {
+  return getPublicKey(privateKeyHex);
+}
+
+/**
+ * Calculate event hash (ID)
+ */
+export function calculateEventHash(event: UnsignedEvent): string {
+  return getEventHash(event);
+}
+
+/**
+ * Sign event with private key
+ */
+export function signEventWithKey(event: UnsignedEvent, privateKeyHex: string): string {
+  const signedEvent = finalizeEvent(event, privateKeyHex);
+  return signedEvent.sig;
+}
+
+/**
+ * Verify event signature
+ */
+export function verifyEventSignature(event: NostrEvent): boolean {
+  return verifyEvent(event);
+}
+
+/**
+ * Complete event signing: adds pubkey, id, and sig
+ */
+export function finalizeEventSigning(
+  event: UnsignedEvent,
+  privateKeyHex: string,
+  pubkey?: string
+): NostrEvent {
+  return finalizeEvent(event, privateKeyHex);
+}
+
+// ============= NIP-04 & NIP-47 (NWC) =============
+
+/**
+ * Re-export finalizeEvent for event signing
+ * Used by NWCService and ZapService
+ */
+export { finalizeEvent };
+
+/**
+ * Re-export nip04 for NIP-04 encryption/decryption
+ * Used by NWCService for encrypted wallet communication
+ */
+export { nip04 };

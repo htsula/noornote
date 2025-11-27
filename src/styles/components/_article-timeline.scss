@@ -1,0 +1,230 @@
+/**
+ * Article Timeline Styles
+ * Styles for the long-form article feed
+ */
+
+@use '../abstracts/variables' as *;
+
+// View wrapper
+.article-timeline-view {
+  padding: $gap;
+
+  &__header {
+    margin-bottom: calc($gap * 1.5);
+  }
+
+  &__title {
+    font-size: 24px;
+    font-weight: $font-weight-semibold;
+    color: $color-5;
+    margin: 0 0 calc($gap / 4) 0;
+  }
+
+  &__subtitle {
+    font-size: 14px;
+    color: $color-3;
+    margin: 0;
+  }
+}
+
+// Timeline container
+.article-timeline {
+  &__list {
+    display: flex;
+    flex-direction: column;
+    gap: $gap;
+  }
+
+  &__loading,
+  &__empty,
+  &__error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: calc($gap * 3) $gap;
+    color: $color-5;
+    text-align: center;
+  }
+
+  &__empty {
+    svg {
+      color: $color-3;
+      margin-bottom: $gap;
+      opacity: 0.6;
+    }
+
+    p {
+      font-size: 16px;
+      margin: 0 0 calc($gap / 4) 0;
+    }
+
+    span {
+      font-size: 14px;
+      color: $color-3;
+    }
+  }
+
+  &__error {
+    p {
+      font-size: 16px;
+      margin: 0 0 $gap 0;
+      color: $color-error;
+    }
+  }
+}
+
+// Article card
+.article-card {
+  display: flex;
+  flex-direction: column;
+  background: $color-2;
+  border-radius: $radius-lg;
+  overflow: hidden;
+  transition: transform $transition-fast, box-shadow $transition-fast;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: $shadow-lg;
+  }
+
+  &__image {
+    width: 100%;
+    height: 180px;
+    overflow: hidden;
+    background: $color-1;
+
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+  }
+
+  &__content {
+    padding: $gap;
+    display: flex;
+    flex-direction: column;
+    gap: calc($gap / 2);
+  }
+
+  &__title {
+    font-size: 18px;
+    font-weight: $font-weight-semibold;
+    color: $color-5;
+    margin: 0;
+    line-height: $line-height-snug;
+
+    // Truncate after 2 lines
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  &__summary {
+    font-size: 14px;
+    color: $color-5;
+    opacity: 0.8;
+    margin: 0;
+    line-height: $line-height-normal;
+
+    // Truncate after 3 lines
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  &__meta {
+    display: flex;
+    align-items: center;
+    gap: calc($gap / 2);
+    font-size: 13px;
+    color: $color-3;
+  }
+
+  &__author {
+    // Uses .mention-link styles from _links.scss
+    .mention-link {
+      font-size: 13px;
+    }
+  }
+
+  &__date {
+    &::before {
+      content: '•';
+      margin-right: calc($gap / 2);
+    }
+  }
+
+  &__tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: calc($gap / 4);
+    margin-top: calc($gap / 4);
+  }
+
+  &__tag {
+    font-size: 12px;
+    color: $color-3;
+    background: $color-1;
+    padding: calc($gap / 8) calc($gap / 2);
+    border-radius: $radius-full;
+  }
+}
+
+// Skeleton loading for article cards
+.article-card-skeleton {
+  display: flex;
+  flex-direction: column;
+  background: $color-2;
+  border-radius: $radius-lg;
+  overflow: hidden;
+
+  .skeleton-image {
+    width: 100%;
+    height: 180px;
+    background: linear-gradient(90deg, $color-1 25%, $color-2 50%, $color-1 75%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.5s infinite;
+  }
+
+  .skeleton-content {
+    padding: $gap;
+    display: flex;
+    flex-direction: column;
+    gap: calc($gap / 2);
+  }
+
+  .skeleton-line {
+    height: 16px;
+    background: linear-gradient(90deg, $color-1 25%, $color-2 50%, $color-1 75%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.5s infinite;
+    border-radius: $radius-base;
+  }
+
+  .skeleton-title {
+    width: 80%;
+    height: 20px;
+  }
+
+  .skeleton-summary {
+    width: 100%;
+  }
+
+  .skeleton-meta {
+    width: 40%;
+    height: 14px;
+  }
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}

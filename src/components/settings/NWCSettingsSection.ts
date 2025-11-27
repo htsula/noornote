@@ -1,0 +1,315 @@
+/**
+ * NWCSettingsSection Component
+ * Manages Nostr Wallet Connect (NWC) and Zap default settings
+ *
+ * @purpose Configure Lightning wallet connection and zap defaults
+ * @used-by SettingsView
+ */
+
+import { SettingsSection } from './SettingsSection';
+import { NWCService } from '../../services/NWCService';
+import { ExchangeRateService } from '../../services/ExchangeRateService';
+
+interface ZapDefaults {
+  amount: number;
+  comment: string;
+}
+
+interface FiatCurrencySettings {
+  currency: string;
+}
+
+export class NWCSettingsSection extends SettingsSection {
+  private nwcService: NWCService;
+  private exchangeRateService: ExchangeRateService;
+  private zapDefaults: ZapDefaults;
+  private fiatCurrencySettings: FiatCurrencySettings;
+  private readonly zapDefaultsStorageKey = 'noornote_zap_defaults';
+
+  constructor() {
+    super('zaps');
+    this.nwcService = NWCService.getInstance();
+    this.exchangeRateService = ExchangeRateService.getInstance();
+    this.zapDefaults = { amount: 21, comment: '' };
+    this.fiatCurrencySettings = { currency: 'EUR' };
+  }
+
+  /**
+   * Load zap defaults from storage
+   */
+  private async loadZapDefaults(): Promise<ZapDefaults> {
+    try {
+      const { KeychainStorage } = await import('../../services/KeychainStorage');
+      const stored = await KeychainStorage.loadZapDefaults();
+      if (stored) {
+        return stored;
+      }
+    } catch (error) {
+      console.warn('Failed to load zap defaults:', error);
+    }
+
+    return { amount: 21, comment: '' };
+  }
+
+  /**
+   * Save zap defaults to Keychain/localStorage
+   */
+  private async saveZapDefaults(): Promise<void> {
+    try {
+      const { KeychainStorage } = await import('../../services/KeychainStorage');
+      await KeychainStorage.saveZapDefaults(this.zapDefaults.amount, this.zapDefaults.comment);
+    } catch (error) {
+      console.warn('Failed to save zap defaults:', error);
+    }
+  }
+
+  /**
+   * Load fiat currency settings from storage
+   */
+  private async loadFiatCurrencySettings(): Promise<FiatCurrencySettings> {
+    try {
+      const { KeychainStorage } = await import('../../services/KeychainStorage');
+      const stored = await KeychainStorage.loadFiatCurrency();
+      if (stored) {
+        return { currency: stored };
+      }
+    } catch (error) {
+      console.warn('Failed to load fiat currency settings:', error);
+    }
+
+    return { currency: 'EUR' };
+  }
+
+  /**
+   * Save fiat currency settings to storage
+   */
+  private async saveFiatCurrencySettings(): Promise<void> {
+    try {
+      const { KeychainStorage } = await import('../../services/KeychainStorage');
+      await KeychainStorage.saveFiatCurrency(this.fiatCurrencySettings.currency);
+
+      window.dispatchEvent(new CustomEvent('fiat-currency-changed', {
+        detail: { currency: this.fiatCurrencySettings.currency }
+      }));
+    } catch (error) {
+      console.warn('Failed to save fiat currency settings:', error);
+    }
+  }
+
+  /**
+   * Mount section content into the DOM
+   */
+  public async mount(parentContainer: HTMLElement): Promise<void> {
+    const contentContainer = this.getContentContainer(parentContainer);
+    if (!contentContainer) return;
+
+    // Load defaults BEFORE rendering
+    this.zapDefaults = await this.loadZapDefaults();
+    this.fiatCurrencySettings = await this.loadFiatCurrencySettings();
+
+    contentContainer.innerHTML = this.renderContent();
+    this.bindListeners(contentContainer);
+
+    // Listen for NWC connection restoration event
+    window.addEventListener('nwc-connection-restored', () => {
+      this.mount(parentContainer); // Re-render to show connected state
+    });
+  }
+
+  /**
+   * Render currency options for dropdown
+   */
+  private renderCurrencyOptions(): string {
+    const currencies = this.exchangeRateService.getAvailableCurrencies();
+
+    return currencies
+      .map(currency => `<option value="${currency.code}" ${this.fiatCurrencySettings.currency === currency.code ? 'selected' : ''}>${currency.symbol} ${currency.name} (${currency.code})</option>`)
+      .join('');
+  }
+
+  /**
+   * Render zap settings content
+   */
+  private renderContent(): string {
+    const isConnected = this.nwcService.isConnected();
+    const lightningAddress = this.nwcService.getLightningAddress();
+
+    if (!isConnected) {
+      // Disconnected State
+      return `
+        <div class="zap-settings">
+          <div class="zap-info">
+            <p>Connect your Lightning wallet via Nostr Wallet Connect (NWC) to send zaps. Get your NWC connection string from your Lightning wallet provider (Alby, Mutiny, etc.).</p>
+          </div>
+
+          <div class="zap-connect">
+            <label for="nwc-connection-string">NWC Connection String:</label>
+            <input
+              type="password"
+              id="nwc-connection-string"
+              class="nwc-input"
+              placeholder="nostr+walletconnect://..."
+            />
+            <button class="btn btn--medium" id="nwc-connect-btn">Connect Wallet</button>
+            <div class="nwc-status" id="nwc-status"></div>
+          </div>
+        </div>
+      `;
+    } else {
+      // Connected State
+      return `
+        <div class="zap-settings">
+          <div class="zap-connected">
+            <div class="zap-wallet-status">
+              <span class="wallet-icon">⚡</span>
+              <div class="wallet-connected-info">
+                <span class="wallet-connected-text">Lightning Wallet Connected</span>
+                ${lightningAddress ? `<span class="wallet-ln-address">${lightningAddress}</span>` : ''}
+              </div>
+              <button class="btn btn--small btn--secondary" id="nwc-disconnect-btn">Disconnect</button>
+            </div>
+          </div>
+
+          <div class="zap-defaults">
+            <h3 class="subsection-title">Quick Zap Defaults</h3>
+            <p class="zap-subsection-desc">Configure default amount and comment for quick zaps (single click).</p>
+
+            <div class="zap-default-amount">
+              <label for="zap-default-amount">Default Amount (sats):</label>
+              <input
+                type="number"
+                id="zap-default-amount"
+                class="zap-amount-input"
+                min="1"
+                value="${this.zapDefaults.amount}"
+              />
+            </div>
+
+            <div class="zap-default-comment">
+              <label for="zap-default-comment">Default Comment (optional):</label>
+              <input
+                type="text"
+                id="zap-default-comment"
+                class="zap-comment-input"
+                placeholder="Great post!"
+                value="${this.zapDefaults.comment}"
+                maxlength="200"
+              />
+            </div>
+
+            <div class="zap-fiat-currency">
+              <label for="fiat-currency-select">Zap Balance Fiat Currency:</label>
+              <select id="fiat-currency-select" class="fiat-currency-select">
+                ${this.renderCurrencyOptions()}
+              </select>
+            </div>
+
+            <div class="zap-save">
+              <button class="btn btn--medium" id="save-zap-defaults-btn">Save Defaults</button>
+              <div class="save-message" id="zap-save-message"></div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+  }
+
+  /**
+   * Bind event listeners
+   */
+  private bindListeners(contentContainer: HTMLElement): void {
+    const isConnected = this.nwcService.isConnected();
+
+    if (!isConnected) {
+      // Connect button
+      const connectBtn = contentContainer.querySelector('#nwc-connect-btn');
+      const connectionInput = contentContainer.querySelector('#nwc-connection-string') as HTMLInputElement;
+
+      connectBtn?.addEventListener('click', async () => {
+        const connectionString = connectionInput?.value.trim();
+        if (!connectionString) {
+          this.showMessage(contentContainer, 'Please enter NWC connection string', 'error');
+          return;
+        }
+
+        // Show loading state
+        (connectBtn as HTMLButtonElement).disabled = true;
+        (connectBtn as HTMLButtonElement).textContent = 'Connecting...';
+
+        // Attempt connection
+        const success = await this.nwcService.connect(connectionString);
+
+        if (success) {
+          // Refresh zap settings panel to show connected state
+          const parentContainer = contentContainer.closest('.settings-container') as HTMLElement;
+          if (parentContainer) {
+            this.mount(parentContainer);
+          }
+        } else {
+          // Re-enable button on failure
+          (connectBtn as HTMLButtonElement).disabled = false;
+          (connectBtn as HTMLButtonElement).textContent = 'Connect Wallet';
+        }
+      });
+    } else {
+      // Disconnect button
+      const disconnectBtn = contentContainer.querySelector('#nwc-disconnect-btn');
+      disconnectBtn?.addEventListener('click', async () => {
+        await this.nwcService.disconnect();
+        // Refresh zap settings panel to show disconnected state
+        const parentContainer = contentContainer.closest('.settings-container') as HTMLElement;
+        if (parentContainer) {
+          this.mount(parentContainer);
+        }
+      });
+
+      // Save defaults button
+      const saveBtn = contentContainer.querySelector('#save-zap-defaults-btn');
+      const amountInput = contentContainer.querySelector('#zap-default-amount') as HTMLInputElement;
+      const commentInput = contentContainer.querySelector('#zap-default-comment') as HTMLInputElement;
+      const currencySelect = contentContainer.querySelector('#fiat-currency-select') as HTMLSelectElement;
+
+      saveBtn?.addEventListener('click', async () => {
+        const amount = parseInt(amountInput?.value || '21', 10);
+        const comment = commentInput?.value || '';
+        const currency = currencySelect?.value || 'EUR';
+
+        if (amount < 1) {
+          this.showMessage(contentContainer, 'Amount must be at least 1 sat', 'error');
+          return;
+        }
+
+        // Update and save
+        this.zapDefaults = { amount, comment };
+        this.fiatCurrencySettings = { currency };
+        await this.saveZapDefaults();
+        await this.saveFiatCurrencySettings();
+
+        this.showMessage(contentContainer, 'Zap defaults saved!', 'success');
+      });
+    }
+  }
+
+  /**
+   * Show message
+   */
+  private showMessage(contentContainer: HTMLElement, message: string, type: 'success' | 'error'): void {
+    const messageEl = contentContainer.querySelector('#nwc-status, #zap-save-message');
+    if (!messageEl) return;
+
+    messageEl.textContent = message;
+    messageEl.className = type === 'success' ? 'save-message success' : 'save-message error';
+
+    setTimeout(() => {
+      messageEl.textContent = '';
+      messageEl.className = 'save-message';
+    }, 5000);
+  }
+
+  /**
+   * Unmount section and cleanup
+   */
+  public unmount(): void {
+    // Cleanup if needed
+  }
+}

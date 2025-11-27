@@ -1,0 +1,196 @@
+/**
+ * ReactionService - Like/Reaction Publishing Service
+ * Handles creation and publishing of Kind 7 (reaction) events
+ *
+ * Kind 7: Reaction (like with emoji)
+ * NIP-25: https://github.com/nostr-protocol/nips/blob/master/25.md
+ */
+
+import type { Event as NostrEvent } from '@nostr-dev-kit/ndk';
+import { AuthService } from './AuthService';
+import { NostrTransport } from './transport/NostrTransport';
+import { SystemLogger } from '../components/system/SystemLogger';
+import { ErrorService } from './ErrorService';
+import { ToastService } from './ToastService';
+import { ReactionsOrchestrator } from './orchestration/ReactionsOrchestrator';
+
+export interface ReactionOptions {
+  /** Note ID to react to */
+  noteId: string;
+  /** Note author pubkey */
+  authorPubkey: string;
+  /** Emoji reaction (default: ❤️) */
+  emoji?: string;
+  /** Target relays to publish to */
+  relays: string[];
+}
+
+export class ReactionService {
+  private static instance: ReactionService;
+  private authService: AuthService;
+  private transport: NostrTransport;
+  private systemLogger: SystemLogger;
+  private reactionsOrchestrator: ReactionsOrchestrator;
+
+  private constructor() {
+    this.authService = AuthService.getInstance();
+    this.transport = NostrTransport.getInstance();
+    this.systemLogger = SystemLogger.getInstance();
+    this.reactionsOrchestrator = ReactionsOrchestrator.getInstance();
+  }
+
+  public static getInstance(): ReactionService {
+    if (!ReactionService.instance) {
+      ReactionService.instance = new ReactionService();
+    }
+    return ReactionService.instance;
+  }
+
+  /**
+   * Check if current user has already liked a note
+   *
+   * @param noteId - Note ID to check
+   * @returns Promise<boolean> - True if user has already liked
+   */
+  public async hasUserLiked(noteId: string): Promise<boolean> {
+    const currentUser = this.authService.getCurrentUser();
+    if (!currentUser) return false;
+
+    try {
+      const stats = await this.reactionsOrchestrator.getDetailedStats(noteId);
+
+      // Check if any reaction event is from the current user
+      const userReaction = stats.reactionEvents.find(
+        event => event.pubkey === currentUser.pubkey
+      );
+
+      return !!userReaction;
+    } catch (error) {
+      this.systemLogger.warn('ReactionService', 'Failed to check if user liked note:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Check if current user has already liked a note with a specific emoji
+   *
+   * @param noteId - Note ID to check
+   * @param emoji - Emoji to check for (e.g. "❤️", "🔥", "👍")
+   * @returns Promise<boolean> - True if user has already reacted with this emoji
+   */
+  public async hasUserLikedWithEmoji(noteId: string, emoji: string): Promise<boolean> {
+    const currentUser = this.authService.getCurrentUser();
+    if (!currentUser) return false;
+
+    try {
+      const stats = await this.reactionsOrchestrator.getDetailedStats(noteId);
+
+      // Normalize emoji for comparison (handle "+" and empty as ❤️)
+      const normalizedTargetEmoji = (emoji === '+' || emoji === '') ? '❤️' : emoji;
+
+      // Check if user has reacted with this specific emoji
+      const userReaction = stats.reactionEvents.find(event => {
+        if (event.pubkey !== currentUser.pubkey) return false;
+
+        const eventEmoji = event.content.trim();
+        const normalizedEventEmoji = (eventEmoji === '+' || eventEmoji === '') ? '❤️' : eventEmoji;
+
+        return normalizedEventEmoji === normalizedTargetEmoji;
+      });
+
+      return !!userReaction;
+    } catch (error) {
+      this.systemLogger.warn('ReactionService', 'Failed to check if user liked note with emoji:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Create and publish a Kind 7 reaction event
+   *
+   * @param options - Reaction configuration
+   * @returns Promise<{ success: boolean; alreadyLiked?: boolean; error?: string }> - Result status
+   */
+  public async publishReaction(options: ReactionOptions): Promise<{ success: boolean; alreadyLiked?: boolean; error?: string }> {
+    const { noteId, authorPubkey, emoji = '❤️', relays } = options;
+
+    // Validate authentication
+    const currentUser = this.authService.getCurrentUser();
+    if (!currentUser) {
+      this.systemLogger.error('ReactionService', 'Cannot publish reaction: User not authenticated');
+      ToastService.show('You must be logged in to like', 'error');
+      return { success: false, error: 'Not authenticated' };
+    }
+
+    // Validate inputs
+    if (!noteId || !authorPubkey) {
+      this.systemLogger.error('ReactionService', 'Cannot publish reaction: Missing noteId or authorPubkey');
+      ToastService.show('Invalid note data', 'error');
+      return { success: false, error: 'Invalid note data' };
+    }
+
+    if (!relays || relays.length === 0) {
+      this.systemLogger.error('ReactionService', 'Cannot publish reaction: No relays specified');
+      ToastService.show('No relays configured', 'error');
+      return { success: false, error: 'No relays configured' };
+    }
+
+    // Check if user has already liked this note
+    const alreadyLiked = await this.hasUserLiked(noteId);
+    if (alreadyLiked) {
+      this.systemLogger.info('ReactionService', `User has already liked note ${noteId.slice(0, 8)}...`);
+      ToastService.show('You already liked this note', 'info');
+      return { success: false, alreadyLiked: true };
+    }
+
+    try {
+      // Build tags array (NIP-25)
+      const tags: string[][] = [
+        ['e', noteId],      // Event being reacted to
+        ['p', authorPubkey] // Author of the event being reacted to
+      ];
+
+      // Build unsigned event
+      const unsignedEvent = {
+        kind: 7,
+        created_at: Math.floor(Date.now() / 1000),
+        tags,
+        content: emoji,  // Emoji as content
+        pubkey: currentUser.pubkey
+      };
+
+      this.systemLogger.info('ReactionService', `Publishing reaction ${emoji} to note ${noteId.slice(0, 8)}...`);
+
+      // Sign event using browser extension
+      const signedEvent = await this.authService.signEvent(unsignedEvent);
+
+      if (!signedEvent) {
+        this.systemLogger.error('ReactionService', 'Failed to sign reaction event');
+        ToastService.show('Signing failed', 'error');
+        return { success: false, error: 'Signing failed' };
+      }
+
+      // Publish to specified relays
+      await this.transport.publish(relays, signedEvent);
+
+      this.systemLogger.info(
+        'ReactionService',
+        `Reaction published to ${relays.length} relay(s): ${emoji} on note ${noteId.slice(0, 8)}...`
+      );
+
+      // Show success toast to user
+      ToastService.show(`Liked: ${emoji}`, 'success');
+
+      return { success: true };
+    } catch (error) {
+      // Centralized error handling with user notification
+      ErrorService.handle(
+        error,
+        'ReactionService.publishReaction',
+        true,
+        'Like konnte nicht abgegeben werden. Bitte versuche es erneut.'
+      );
+      return { success: false, error: 'Publish failed' };
+    }
+  }
+}

@@ -1,0 +1,64 @@
+/**
+ * WalletBalanceDisplay Component Styles
+ * Lightning wallet balance display in sidebar
+ */
+
+@use '../abstracts/variables' as *;
+
+.wallet-balance-display {
+  display: none; // Hidden by default, shown when NWC connected
+  margin-bottom: $gap;
+  position: relative;
+}
+
+.wallet-balance-content {
+  font-size: 0.95rem;
+  color: $color-5;
+}
+
+.wallet-balance-amount {
+  font-weight: 600;
+  color: $color-5;
+}
+
+.wallet-balance-content .sats-icon {
+  width: 18px;
+  height: 18px;
+  filter: brightness(0) saturate(100%) invert(93%) sepia(9%) saturate(414%) hue-rotate(329deg) brightness(103%) contrast(91%);
+  margin: 0;
+  display: inline-block;
+  vertical-align: text-bottom;
+}
+
+.wallet-balance-exchange {
+  color: $color-5;
+  opacity: 0.6;
+  margin: 0 calc($gap / 4);
+}
+
+.wallet-balance-fiat-amount {
+  font-weight: 600;
+  color: $color-5;
+}
+
+.wallet-balance-toggle {
+  position: absolute;
+  top: 0.1rem;
+  right: 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  opacity: 0.5;
+  transition: opacity 0.2s ease;
+
+  &:hover {
+    opacity: 1;
+  }
+
+  .eye-icon {
+    width: 18px;
+    height: 18px;
+    color: $color-5;
+  }
+}

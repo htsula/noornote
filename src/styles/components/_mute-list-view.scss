@@ -1,0 +1,224 @@
+/**
+ * Mute List View Styles
+ * Displays and manages muted users
+ */
+
+@use '../abstracts/variables' as *;
+@use 'sass:color';
+
+.mute-list-header {
+  margin-bottom: $gap * 2;
+
+  h2 {
+    font-size: 24px;
+    font-weight: 600;
+    margin-bottom: calc($gap / 2);
+    color: $color-1;
+  }
+
+  .mute-list-description {
+    font-size: 14px;
+    color: $color-3;
+    margin-bottom: $gap;
+  }
+}
+
+// Button action groups
+.mute-list-actions {
+  display: flex;
+  flex-direction: column;
+  gap: $gap;
+  margin-top: $gap * 1.5;
+
+  &__group {
+    display: flex;
+    gap: calc($gap / 2);
+    flex-wrap: wrap;
+  }
+}
+
+.mute-list-content {
+  min-height: 200px;
+}
+
+.mute-list-loading,
+.mute-list-error {
+  text-align: center;
+  padding: $gap * 3;
+  color: $color-3;
+  font-size: 14px;
+}
+
+.mute-list-empty {
+  text-align: center;
+  padding: 0;
+
+  svg {
+    color: $color-3;
+    margin-bottom: $gap;
+  }
+
+  h3 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: calc($gap / 2);
+    color: $color-3;
+  }
+
+  p {
+    font-size: 14px;
+    color: $color-3;
+  }
+}
+
+.mute-list-items {
+  display: flex;
+  flex-direction: column;
+  gap: calc($gap / 2);
+}
+
+.mute-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0;
+  margin-bottom: calc($gap / 2);
+}
+
+.mute-list-item__info {
+  display: flex;
+  align-items: center;
+  gap: calc($gap / 2);
+  flex: 1;
+}
+
+.mute-list-item__lock {
+  font-size: 12px;
+  opacity: 0.6;
+}
+
+.mute-list-item__badge {
+  font-size: 12px;
+  margin-left: 4px;
+
+  &--private {
+    opacity: 0.7;
+  }
+}
+
+.mute-list-item__thread-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: color.adjust($color-2, $lightness: 5%);
+  border-radius: $radius-sm;
+  color: $color-warning;
+
+  svg {
+    width: 16px;
+    height: 16px;
+  }
+}
+
+.mute-list-item__event-id {
+  font-family: monospace;
+  font-size: 13px;
+  color: $color-3;
+}
+
+.mute-list-item--thread {
+  .mute-list-item__info {
+    gap: $gap;
+  }
+}
+
+.unmute-btn,
+.unmute-user-btn,
+.unmute-thread-btn {
+  flex-shrink: 0;
+}
+
+// Sections (Users / Threads)
+.mute-list-section {
+  margin-bottom: $gap * 2;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+
+  &__header {
+    margin-bottom: $gap;
+    padding-bottom: calc($gap / 2);
+    border-bottom: 1px solid color.adjust($color-2, $lightness: 10%);
+  }
+
+  &__title {
+    display: flex;
+    align-items: center;
+    gap: calc($gap / 2);
+    font-size: 16px;
+    font-weight: 600;
+    color: $color-1;
+    margin: 0;
+
+    svg {
+      width: 16px;
+      height: 16px;
+      opacity: 0.7;
+    }
+  }
+
+  &__count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    background: $color-4;
+    color: $color-1;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  &__description {
+    font-size: 13px;
+    color: $color-3;
+    margin-top: calc($gap / 4);
+  }
+}
+
+// Settings Mutes Section
+.mutes-settings {
+  .mutes-info {
+    margin-bottom: $gap * 1.5;
+
+    p {
+      font-size: 14px;
+      line-height: 1.6;
+      margin-bottom: calc($gap / 2);
+
+      &:last-child {
+        margin-bottom: 0;
+      }
+    }
+
+    .mutes-warning {
+      padding: calc($gap / 2) $gap;
+      background: rgba($color-4, 0.1);
+      border-radius: 4px;
+      border-left: 3px solid $color-4;
+    }
+  }
+
+  .private-mutes-switch-container {
+    margin-bottom: $gap * 2;
+  }
+
+  .mutes-encryption-method {
+    margin-bottom: $gap;
+  }
+}

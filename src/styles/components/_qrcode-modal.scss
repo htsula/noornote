@@ -1,0 +1,53 @@
+/**
+ * QRCode Modal - Content-Specific Styles
+ * Modal infrastructure handled by _modal.scss
+ * This file only contains styles specific to QR code content
+ */
+
+@use '../abstracts/variables' as *;
+@use '../abstracts/mixins' as *;
+
+// QR code content container
+.qrcode-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: $gap;
+}
+
+// QR container
+.qrcode-modal__qr-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: $gap;
+}
+
+// QR code image
+.qrcode-modal__qr-image {
+  width: 300px;
+  height: 300px;
+  border: 2px solid $color-3;
+  border-radius: 8px;
+  display: block;
+
+  @include mobile-down {
+    width: 250px;
+    height: 250px;
+  }
+}
+
+// npub text below QR code
+.qrcode-modal__npub-text {
+  color: $color-5;
+  font-size: 14px;
+  font-family: monospace;
+  margin: 0;
+}
+
+// Instruction text
+.qrcode-modal__instruction {
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  margin: 0;
+}

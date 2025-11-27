@@ -1,0 +1,312 @@
+/**
+ * ProfileSearchOrchestrator - Profile-specific note search
+ * Handles searching through a user's notes with chunked fetching
+ *
+ * @orchestrator ProfileSearchOrchestrator
+ * @purpose Search through user notes with client-side filtering
+ * @used-by ProfileSearchComponent, SearchResultsView
+ *
+ * Architecture:
+ * - Fetches user notes in time-chunked queries (3-month chunks)
+ * - Performs client-side search with AND logic
+ * - Caches search results for session
+ * - Provides progress callbacks for UI feedback
+ */
+
+import type { Event as NostrEvent, Filter as NostrFilter } from '@nostr-dev-kit/ndk';
+import { Orchestrator } from './Orchestrator';
+import { NostrTransport } from '../transport/NostrTransport';
+import { SystemLogger } from '../../components/system/SystemLogger';
+
+export interface SearchRequest {
+  pubkeyHex: string;
+  searchTerms: string;
+  onProgress?: (message: string) => void;
+}
+
+export interface SearchResult {
+  events: NostrEvent[];
+  matchCount: number;
+  totalNotes: number;
+  dateRange: {
+    start: string;
+    end: string;
+  };
+}
+
+interface CachedSearch {
+  pubkeyHex: string;
+  searchTerms: string;
+  result: SearchResult;
+  timestamp: number;
+}
+
+export class ProfileSearchOrchestrator extends Orchestrator {
+  private static instance: ProfileSearchOrchestrator;
+  private transport: NostrTransport;
+  private systemLogger: SystemLogger;
+
+  /** Search cache (per session) */
+  private searchCache: Map<string, CachedSearch> = new Map();
+
+  /** Fetched notes cache (per pubkey) */
+  private notesCache: Map<string, NostrEvent[]> = new Map();
+
+  /** Cache TTL: 30 minutes */
+  private readonly CACHE_TTL = 30 * 60 * 1000;
+
+  private constructor() {
+    super('ProfileSearchOrchestrator');
+    this.transport = NostrTransport.getInstance();
+    this.systemLogger = SystemLogger.getInstance();
+    this.systemLogger.info('ProfileSearch', '🔍 Search ready to explore notes');
+  }
+
+  public static getInstance(): ProfileSearchOrchestrator {
+    if (!ProfileSearchOrchestrator.instance) {
+      ProfileSearchOrchestrator.instance = new ProfileSearchOrchestrator();
+    }
+    return ProfileSearchOrchestrator.instance;
+  }
+
+  /**
+   * Search through user's notes
+   */
+  public async searchUserNotes(request: SearchRequest): Promise<SearchResult> {
+    const { pubkeyHex, searchTerms, onProgress } = request;
+
+    // Check cache first
+    const cacheKey = `${pubkeyHex}:${searchTerms.toLowerCase()}`;
+    const cached = this.searchCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp) < this.CACHE_TTL) {
+      this.systemLogger.info('ProfileSearch', '📦 Using cached search results');
+      return cached.result;
+    }
+
+    this.systemLogger.info('ProfileSearch', `🔍 Searching notes for: "${searchTerms}"`);
+    onProgress?.('Preparing search...');
+
+    try {
+      // Fetch all user notes (with caching)
+      const allNotes = await this.fetchAllUserNotes(pubkeyHex, onProgress);
+
+      onProgress?.('Searching for matches...');
+
+      // Perform client-side search
+      const matchingNotes = this.searchNotes(allNotes, searchTerms);
+
+      // Determine date range
+      let dateRange = { start: 'N/A', end: 'N/A' };
+      if (allNotes.length > 0) {
+        const timestamps = allNotes.map(n => n.created_at).sort((a, b) => a - b);
+        const formatDate = (timestamp: number) => {
+          const date = new Date(timestamp * 1000);
+          const month = date.toLocaleDateString('en-US', { month: 'short' });
+          const day = date.getDate();
+          const year = date.getFullYear();
+          return `${month} ${day}, ${year}`;
+        };
+        dateRange = {
+          start: formatDate(timestamps[0]),
+          end: formatDate(timestamps[timestamps.length - 1])
+        };
+      }
+
+      // Sort results by date (newest first)
+      matchingNotes.sort((a, b) => b.created_at - a.created_at);
+
+      const result: SearchResult = {
+        events: matchingNotes,
+        matchCount: matchingNotes.length,
+        totalNotes: allNotes.length,
+        dateRange
+      };
+
+      // Cache result
+      this.searchCache.set(cacheKey, {
+        pubkeyHex,
+        searchTerms: searchTerms.toLowerCase(),
+        result,
+        timestamp: Date.now()
+      });
+
+      this.systemLogger.info(
+        'ProfileSearch',
+        `✨ Found ${matchingNotes.length} matching notes (${allNotes.length} total)`
+      );
+
+      return result;
+    } catch (error) {
+      this.systemLogger.error('ProfileSearch', `Search failed: ${error}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Fetch all notes from a user (with chunking to avoid relay limits)
+   */
+  private async fetchAllUserNotes(
+    pubkeyHex: string,
+    onProgress?: (message: string) => void
+  ): Promise<NostrEvent[]> {
+    // Check notes cache first
+    const cached = this.notesCache.get(pubkeyHex);
+    if (cached) {
+      this.systemLogger.info('ProfileSearch', '📦 Using cached user notes');
+      return cached;
+    }
+
+    const allEvents = new Map<string, NostrEvent>();
+    const startDate = new Date('2023-01-01');
+    const endDate = new Date();
+
+    // Split into 3-month chunks to avoid relay limits
+    const chunkMonths = 3;
+    const chunks: { since: number; until: number }[] = [];
+
+    let currentDate = new Date(startDate);
+    while (currentDate < endDate) {
+      const chunkEnd = new Date(currentDate);
+      chunkEnd.setMonth(chunkEnd.getMonth() + chunkMonths);
+      if (chunkEnd > endDate) chunkEnd.setTime(endDate.getTime());
+
+      chunks.push({
+        since: Math.floor(currentDate.getTime() / 1000),
+        until: Math.floor(chunkEnd.getTime() / 1000)
+      });
+
+      currentDate = new Date(chunkEnd);
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    onProgress?.(`Fetching notes in ${chunks.length} time chunks...`);
+
+    // Get relays
+    const relays = this.transport.getReadRelays();
+
+    // Query each chunk
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      const formatDate = (timestamp: number) => {
+        const date = new Date(timestamp * 1000);
+        return date.toLocaleDateString('en-US', {
+          month: 'short',
+          year: 'numeric'
+        });
+      };
+      const chunkStart = formatDate(chunk.since);
+      const chunkEnd = formatDate(chunk.until);
+
+      onProgress?.(`Chunk ${i + 1}/${chunks.length} (${chunkStart} - ${chunkEnd})`);
+
+      const filters: NostrFilter[] = [{
+        kinds: [1], // Text notes only
+        authors: [pubkeyHex],
+        since: chunk.since,
+        until: chunk.until,
+        limit: 500
+      }];
+
+      try {
+        const events = await this.transport.fetch(relays, filters);
+
+        // Deduplicate
+        events.forEach(event => {
+          if (!allEvents.has(event.id)) {
+            allEvents.set(event.id, event);
+          }
+        });
+
+        // Small delay to be nice to relays
+        await new Promise(resolve => setTimeout(resolve, 100));
+      } catch (error) {
+        this.systemLogger.warn('ProfileSearch', `Chunk ${i + 1} failed: ${error}`);
+      }
+    }
+
+    onProgress?.('Processing notes...');
+
+    const notes = Array.from(allEvents.values());
+
+    // Cache notes
+    this.notesCache.set(pubkeyHex, notes);
+
+    return notes;
+  }
+
+  /**
+   * Search notes with AND logic (all terms must be present)
+   */
+  private searchNotes(notes: NostrEvent[], searchTerms: string): NostrEvent[] {
+    const terms = searchTerms
+      .toLowerCase()
+      .split(/\s+/)
+      .filter(term => term.length > 0);
+
+    if (terms.length === 0) {
+      return notes;
+    }
+
+    return notes.filter(note => {
+      const content = note.content.toLowerCase();
+      // AND logic: all terms must be present
+      return terms.every(term => content.includes(term));
+    });
+  }
+
+  /**
+   * Clear search cache for a specific pubkey
+   */
+  public clearCacheForPubkey(pubkeyHex: string): void {
+    // Clear notes cache
+    this.notesCache.delete(pubkeyHex);
+
+    // Clear search results cache
+    const keysToDelete: string[] = [];
+    this.searchCache.forEach((cached, key) => {
+      if (cached.pubkeyHex === pubkeyHex) {
+        keysToDelete.push(key);
+      }
+    });
+    keysToDelete.forEach(key => this.searchCache.delete(key));
+
+    this.systemLogger.info('ProfileSearch', '🗑️ Cache cleared for user');
+  }
+
+  /**
+   * Clear all caches
+   */
+  public clearAllCaches(): void {
+    this.searchCache.clear();
+    this.notesCache.clear();
+    this.systemLogger.info('ProfileSearch', '🗑️ All caches cleared');
+  }
+
+  // Orchestrator interface implementations (required by base class)
+
+  public onui(data: any): void {
+    // Handle UI actions if needed
+  }
+
+  public onopen(relay: string): void {
+    // Not used for search (fetch-only)
+  }
+
+  public onmessage(relay: string, event: NostrEvent): void {
+    // Not used for search (fetch-only)
+  }
+
+  public onerror(relay: string, error: Error): void {
+    this.systemLogger.error('ProfileSearch', `Relay error (${relay}): ${error.message}`);
+  }
+
+  public onclose(relay: string): void {
+    // Not used for search (fetch-only)
+  }
+
+  public override destroy(): void {
+    this.clearAllCaches();
+    super.destroy();
+    this.systemLogger.info('ProfileSearch', 'Search orchestrator destroyed');
+  }
+}

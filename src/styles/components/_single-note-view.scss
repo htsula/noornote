@@ -1,0 +1,210 @@
+/**
+ * Single Note View Component Styles
+ * SNV-specific wrappers and containers (note rendering uses NoteUI)
+ */
+
+@use '../abstracts/variables' as *;
+
+// ========================================
+// SNV Container
+// ========================================
+.snv-container {
+  width: 100%;
+  height: 100%;
+  max-width: 900px;
+}
+
+// ========================================
+// SNV Wrapper (wraps NoteUI + SNV-specific elements)
+// ========================================
+.snv-wrapper {
+  // Note itself uses .note-card from NoteUI
+
+  // Replies container
+  .snv-replies-container {
+    margin-top: $gap * 2;
+  }
+
+  // Footer
+  .snv-footer {
+    display: flex;
+    justify-content: flex-start;
+    padding-top: $gap;
+    margin-top: $gap;
+    border-top: 1px solid $color-2;
+  }
+}
+
+// ========================================
+// Back Button
+// ========================================
+.snv-back-btn {
+  padding: calc($gap / 2) $gap;
+  background: $color-2;
+  color: $color-5;
+  border: 1px solid $color-3;
+  border-radius: $radius-sm;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: $color-3;
+    border-color: $color-4;
+  }
+}
+
+// ========================================
+// Loading State
+// ========================================
+.snv-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  gap: $gap;
+
+  .loading-spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid $color-2;
+    border-top-color: $color-4;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  p {
+    color: $color-5;
+    opacity: 0.7;
+    font-size: 15px;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+// ========================================
+// Error State
+// ========================================
+.snv-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  gap: $gap;
+
+  &__icon {
+    font-size: 48px;
+  }
+
+  &__message {
+    color: $color-5;
+    opacity: 0.7;
+    font-size: 18px;
+  }
+}
+
+// ========================================
+// Note Replies (Threaded)
+// ========================================
+.snv-replies-container {
+  margin-top: $gap * 2;
+}
+
+.snv-replies__loading,
+.snv-replies__empty,
+.snv-replies__error {
+  padding: $gap * 2;
+  text-align: center;
+  color: rgba($color-5, 0.6);
+  font-style: italic;
+}
+
+.snv-replies__error {
+  color: rgba(255, 100, 100, 0.8);
+}
+
+.snv-replies__header {
+  margin-bottom: $gap;
+  padding-bottom: $gap;
+  border-bottom: 1px solid $color-2;
+
+  h3 {
+    font-size: 18px;
+    font-weight: 600;
+    color: $color-5;
+  }
+}
+
+.snv-replies__list {
+  // Styling for reply list container
+}
+
+// Individual Reply (wraps NoteUI .note-card)
+.snv-reply {
+  // Threaded indentation based on depth
+  // Each level indents by 24px (half of profile picture width)
+  &[data-depth="1"] {
+    margin-left: 24px;
+  }
+
+  &[data-depth="2"] {
+    margin-left: calc(24px * 2);
+  }
+
+  &[data-depth="3"] {
+    margin-left: calc(24px * 3);
+  }
+
+  &[data-depth="4"] {
+    margin-left: calc(24px * 4);
+  }
+
+  &[data-depth="5"] {
+    margin-left: calc(24px * 5);
+  }
+
+  // Cap at depth 5 to prevent excessive indentation
+  &[data-depth="6"],
+  &[data-depth="7"],
+  &[data-depth="8"],
+  &[data-depth="9"] {
+    margin-left: calc(24px * 5);
+  }
+
+  // NoteUI .note-card is rendered inside, no additional styling needed
+  // (ISL, ThreadContext, Media all handled by NoteUI)
+}
+
+// ========================================
+// Quoted Reposts (Uses NoteUI, just adds header)
+// ========================================
+.snv-quoted-repost {
+  &__header {
+    margin-bottom: calc($gap / 2);
+    padding-left: calc($gap / 2);
+    font-size: 14px;
+    color: rgba($color-5, 0.8);
+  }
+
+  &__link {
+    // Inherits global link styles from atoms/_links.scss
+    font-weight: 600;
+
+    strong {
+      color: inherit;
+      font-weight: inherit;
+    }
+  }
+
+  // NoteUI .note-card is rendered inside, inherits all NoteUI styles
+  // Hide ISL for quoted reposts (they shouldn't have interaction buttons)
+  .isl {
+    display: none;
+  }
+}

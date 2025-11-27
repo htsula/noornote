@@ -1,0 +1,13 @@
+/**
+ * Custom Fonts
+ * Local font-face declarations
+ */
+
+// Saira - Bold (700) - Used for NoorNote logo
+@font-face {
+  font-family: 'Saira';
+  src: url('/fonts/Saira/Saira-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}

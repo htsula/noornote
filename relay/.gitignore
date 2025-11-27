@@ -1,0 +1,8 @@
+# Strfry database (local data)
+strfry-db/
+
+# Docker volumes
+volumes/
+
+# Logs
+*.log

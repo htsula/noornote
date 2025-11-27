@@ -1,0 +1,257 @@
+/**
+ * Debug Logger Component Styles
+ * Live debug logging with 2 sections: Global + Page
+ */
+
+@use '../abstracts/variables' as *;
+@use '../abstracts/mixins' as *;
+
+.system-logger {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  overflow: hidden;
+
+  // Global section (top, 50% height)
+  &__global {
+    flex-shrink: 0;
+    height: calc(50% - $gap);
+    display: flex;
+    flex-direction: column;
+    background: var(--surface-elevated-color);
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: $gap * 2;
+    padding-top: $gap;
+    overflow: hidden;
+  }
+
+  &__global-header {
+    padding: var(--space-xs) var(--space-sm);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    color: var(--text-secondary-color);
+    background: var(--surface-color);
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+  }
+
+  &__global-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--space-xs);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.3;
+
+    // Scrollbar styling - MUST be last
+    @include custom-scrollbar;
+  }
+
+  &__global-logs {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  // Page section (bottom, 50% height)
+  &__page {
+    flex-shrink: 0;
+    height: calc(50% - $gap);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  &__page-header {
+    padding: var(--space-xs) var(--space-sm);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    color: var(--text-secondary-color);
+    background: var(--surface-elevated-color);
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+  }
+
+  &__page-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--space-xs);
+    background: var(--surface-color);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.4;
+
+    // Scrollbar styling - MUST be last
+    @include custom-scrollbar;
+  }
+
+  &__page-logs {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-height: 100%;
+  }
+}
+
+.system-log-entry {
+  display: flex;
+  gap: var(--space-xs);
+  padding: var(--space-xs);
+  border-radius: var(--border-radius-sm);
+  word-break: break-all;
+  font-family: var(--font-mono);
+
+  &--info {
+    background: var(--surface-elevated-color);
+    border-left: 3px solid var(--accent-blue);
+  }
+
+  &--debug {
+    background: var(--surface-color);
+    border-left: 3px solid var(--text-secondary-color);
+    opacity: 0.8;
+  }
+
+  &--warn {
+    background: rgba(255, 193, 7, 0.1);
+    border-left: 3px solid var(--accent-yellow);
+  }
+
+  &--error {
+    background: rgba(220, 53, 69, 0.1);
+    border-left: 3px solid var(--accent-red);
+  }
+
+  &--success {
+    background: rgba($color-6, 0.1);
+    border-left: 3px solid $color-6;
+  }
+
+  &__time {
+    color: var(--text-secondary-color);
+    font-size: var(--font-size-xs);
+    white-space: nowrap;
+    width: 70px;
+    flex-shrink: 0;
+  }
+
+  &__level {
+    font-weight: 600;
+    white-space: nowrap;
+    width: 60px;
+    flex-shrink: 0;
+
+    .system-log-entry--info & {
+      color: var(--accent-blue);
+    }
+
+    .system-log-entry--debug & {
+      color: var(--text-secondary-color);
+    }
+
+    .system-log-entry--warn & {
+      color: var(--accent-yellow);
+    }
+
+    .system-log-entry--error & {
+      color: var(--accent-red);
+    }
+
+    .system-log-entry--success & {
+      color: $color-6;
+    }
+  }
+
+  &__category {
+    color: var(--accent-purple);
+    font-weight: 500;
+    white-space: nowrap;
+    width: 100px;
+    flex-shrink: 0;
+  }
+
+  &__message {
+    color: var(--text-primary-color);
+    flex: 1;
+    word-break: break-word;
+
+    .system-log-entry--success & {
+      color: $color-6;
+    }
+  }
+
+  &__data {
+    margin: var(--space-xs) 0 0 0;
+    padding: var(--space-xs);
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-sm);
+    font-size: var(--font-size-xs);
+    overflow-x: auto;
+    white-space: pre-wrap;
+    color: var(--text-secondary-color);
+  }
+}
+
+// Dark mode optimizations
+@media (prefers-color-scheme: dark) {
+  .system-logger {
+    &__content {
+      background: var(--surface-dark-color);
+    }
+  }
+
+  .system-log-entry {
+    &--info {
+      background: rgba(13, 110, 253, 0.1);
+    }
+
+    &--debug {
+      background: rgba(108, 117, 125, 0.1);
+    }
+
+    &--warn {
+      background: rgba(255, 193, 7, 0.15);
+    }
+
+    &--error {
+      background: rgba(220, 53, 69, 0.15);
+    }
+
+    &--success {
+      background: rgba($color-6, 0.15);
+    }
+  }
+}
+
+// Responsive adjustments
+@media (max-width: 768px) {
+  .system-logger {
+    &__header {
+      padding: var(--space-xs) var(--space-sm);
+
+      h3 {
+        font-size: var(--font-size-xs);
+      }
+    }
+
+    &__controls button {
+      padding: var(--space-xs);
+      font-size: var(--font-size-xs);
+    }
+  }
+
+  .system-log-entry {
+    flex-direction: column;
+    gap: var(--space-xs);
+
+    &__time,
+    &__level,
+    &__category {
+      min-width: auto;
+    }
+  }
+}

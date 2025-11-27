@@ -1,0 +1,137 @@
+/**
+ * FolderCard
+ * Renders a folder (bookmark category/set) as a draggable card
+ *
+ * @purpose Display folder with name, item count, and drop target for bookmarks
+ * @used-by BookmarkSecondaryManager
+ */
+
+export interface FolderData {
+  id: string;           // d-tag identifier
+  name: string;         // title tag or d-tag
+  itemCount: number;    // Number of bookmarks in folder
+}
+
+export interface FolderCardOptions {
+  onClick: (folderId: string) => void;
+  onDelete: (folderId: string) => Promise<void>;
+  onDrop: (bookmarkId: string, folderId: string) => Promise<void>;
+  onDragStart?: (folderId: string, element: HTMLElement) => void;
+  onDragEnd?: () => void;
+}
+
+export class FolderCard {
+  private data: FolderData;
+  private options: FolderCardOptions;
+  private element: HTMLElement | null = null;
+
+  constructor(data: FolderData, options: FolderCardOptions) {
+    this.data = data;
+    this.options = options;
+  }
+
+  public render(): HTMLElement {
+    const { id, name, itemCount } = this.data;
+
+    const card = document.createElement('div');
+    card.className = 'folder-card';
+    card.dataset.folderId = id;
+    card.draggable = true;
+
+    card.innerHTML = `
+      <div class="folder-card__icon">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M3 7V17C3 18.1046 3.89543 19 5 19H19C20.1046 19 21 18.1046 21 17V9C21 7.89543 20.1046 7 19 7H12L10 5H5C3.89543 5 3 5.89543 3 7Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="folder-card__name">${this.escapeHtml(name)}</div>
+      <div class="folder-card__count">${itemCount} ${itemCount === 1 ? 'item' : 'items'}</div>
+      <button class="folder-card__delete" aria-label="Delete folder" title="Delete folder (items move to root)">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M3 4h10M5 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1M6 7v4M10 7v4M4 4l.5 8.5a1 1 0 0 0 1 .95h5a1 1 0 0 0 1-.95L12 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    `;
+
+    this.bindEvents(card);
+    this.element = card;
+    return card;
+  }
+
+  private bindEvents(card: HTMLElement): void {
+    const { id } = this.data;
+
+    // Click on folder (except delete) opens it
+    card.addEventListener('click', (e) => {
+      const target = e.target as HTMLElement;
+      if (target.closest('.folder-card__delete')) return;
+      this.options.onClick(id);
+    });
+
+    // Delete button
+    const deleteBtn = card.querySelector('.folder-card__delete');
+    deleteBtn?.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await this.options.onDelete(id);
+      card.remove();
+    });
+
+    // Drag & Drop - as draggable
+    card.addEventListener('dragstart', (e) => {
+      card.classList.add('dragging');
+      e.dataTransfer?.setData('text/plain', id);
+      e.dataTransfer?.setData('application/x-folder-id', id);
+      this.options.onDragStart?.(id, card);
+    });
+
+    card.addEventListener('dragend', () => {
+      card.classList.remove('dragging');
+      this.options.onDragEnd?.();
+    });
+
+    // Drag & Drop - as drop target
+    card.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      // Only accept bookmark drops, not folder drops
+      if (e.dataTransfer?.types.includes('application/x-bookmark-id')) {
+        card.classList.add('drag-over');
+      }
+    });
+
+    card.addEventListener('dragleave', () => {
+      card.classList.remove('drag-over');
+    });
+
+    card.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      card.classList.remove('drag-over');
+
+      const bookmarkId = e.dataTransfer?.getData('application/x-bookmark-id');
+      if (bookmarkId) {
+        await this.options.onDrop(bookmarkId, id);
+      }
+    });
+  }
+
+  private escapeHtml(text: string): string {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  public getElement(): HTMLElement | null {
+    return this.element;
+  }
+
+  public getFolderId(): string {
+    return this.data.id;
+  }
+
+  public updateCount(count: number): void {
+    this.data.itemCount = count;
+    const countEl = this.element?.querySelector('.folder-card__count');
+    if (countEl) {
+      countEl.textContent = `${count} ${count === 1 ? 'item' : 'items'}`;
+    }
+  }
+}

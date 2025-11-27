@@ -1,0 +1,76 @@
+/**
+ * UpNavigator
+ * The ".." element that appears as the first item in a folder view
+ * Allows navigation back to root and serves as drop target
+ *
+ * @purpose Navigate up from folder to root, accept dropped items
+ * @used-by BookmarkSecondaryManager
+ */
+
+export interface UpNavigatorOptions {
+  onClick: () => void;
+  onDrop: (bookmarkId: string) => Promise<void>;
+}
+
+export class UpNavigator {
+  private options: UpNavigatorOptions;
+  private element: HTMLElement | null = null;
+
+  constructor(options: UpNavigatorOptions) {
+    this.options = options;
+  }
+
+  public render(): HTMLElement {
+    const card = document.createElement('div');
+    card.className = 'up-navigator';
+    card.title = 'Up to root level';
+
+    card.innerHTML = `
+      <div class="up-navigator__icon">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M9 14L4 9L9 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M20 20V13C20 11.9391 19.5786 10.9217 18.8284 10.1716C18.0783 9.42143 17.0609 9 16 9H4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="up-navigator__label">..</div>
+      <div class="up-navigator__hint">Back to root</div>
+    `;
+
+    this.bindEvents(card);
+    this.element = card;
+    return card;
+  }
+
+  private bindEvents(card: HTMLElement): void {
+    // Click navigates up
+    card.addEventListener('click', () => {
+      this.options.onClick();
+    });
+
+    // Drag & Drop - as drop target
+    card.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      if (e.dataTransfer?.types.includes('application/x-bookmark-id')) {
+        card.classList.add('drag-over');
+      }
+    });
+
+    card.addEventListener('dragleave', () => {
+      card.classList.remove('drag-over');
+    });
+
+    card.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      card.classList.remove('drag-over');
+
+      const bookmarkId = e.dataTransfer?.getData('application/x-bookmark-id');
+      if (bookmarkId) {
+        await this.options.onDrop(bookmarkId);
+      }
+    });
+  }
+
+  public getElement(): HTMLElement | null {
+    return this.element;
+  }
+}

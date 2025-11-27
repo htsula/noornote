@@ -1,0 +1,217 @@
+/**
+ * WalletBalanceDisplay Component
+ * Displays Lightning wallet balance in Sats and EUR with toggle visibility
+ */
+
+import { NWCService } from '../../services/NWCService';
+import { SystemLogger } from '../system/SystemLogger';
+import { ExchangeRateService } from '../../services/ExchangeRateService';
+import { KeychainStorage } from '../../services/KeychainStorage';
+
+export class WalletBalanceDisplay {
+  private element: HTMLElement;
+  private nwcService: NWCService;
+  private systemLogger: SystemLogger;
+  private exchangeRateService: ExchangeRateService;
+  private balanceInMsats: number = 0;
+  private balanceVisible: boolean = false; // Default: hidden
+  private selectedCurrency: string = 'EUR';
+  private updateInterval: number | null = null;
+  private readonly STORAGE_KEY = 'wallet_balance_visible';
+
+  constructor() {
+    this.nwcService = NWCService.getInstance();
+    this.systemLogger = SystemLogger.getInstance();
+    this.exchangeRateService = ExchangeRateService.getInstance();
+
+    // Load visibility preference from localStorage
+    const storedVisibility = localStorage.getItem(this.STORAGE_KEY);
+    if (storedVisibility !== null) {
+      this.balanceVisible = storedVisibility === 'true';
+    }
+
+    // Load currency preference
+    this.loadCurrencyPreference();
+
+    this.element = this.createElement();
+    this.setupEventListeners();
+    this.updateEyeIcon(); // Set initial icon state
+    this.loadBalance();
+    this.startAutoUpdate();
+  }
+
+  private async loadCurrencyPreference(): Promise<void> {
+    try {
+      const currency = await KeychainStorage.loadFiatCurrency();
+      if (currency) {
+        this.selectedCurrency = currency;
+      }
+    } catch (error) {
+      this.systemLogger.error('WalletBalanceDisplay', 'Failed to load currency preference:', error);
+    }
+  }
+
+  private createElement(): HTMLElement {
+    const container = document.createElement('div');
+    container.className = 'wallet-balance-display';
+    container.innerHTML = `
+      <div class="wallet-balance-content">
+        <span class="wallet-balance-amount">--</span>
+        <img src="/src/assets/sats.svg" class="sats-icon" alt="sats" />
+        <span class="wallet-balance-exchange">⇄</span>
+        <span class="wallet-balance-fiat-amount">--</span>
+      </div>
+      <button class="wallet-balance-toggle" title="Toggle visibility" aria-label="Toggle balance visibility">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="eye-icon eye-open">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+          <circle cx="12" cy="12" r="3"></circle>
+        </svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="eye-icon eye-closed" style="display: none;">
+          <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+          <line x1="1" y1="1" x2="23" y2="23"></line>
+        </svg>
+      </button>
+    `;
+    return container;
+  }
+
+  private setupEventListeners(): void {
+    const toggleBtn = this.element.querySelector('.wallet-balance-toggle');
+    if (toggleBtn) {
+      toggleBtn.addEventListener('click', () => this.toggleVisibility());
+    }
+
+    // Listen for NWC connection events
+    window.addEventListener('nwc-connection-restored', () => {
+      this.loadBalance();
+    });
+
+    // Listen for payment events (refresh balance after zap)
+    window.addEventListener('zap-sent', () => {
+      setTimeout(() => this.loadBalance(), 2000); // Wait 2s for payment to settle
+    });
+
+    // Listen for currency change events
+    window.addEventListener('fiat-currency-changed', async (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const currency = customEvent.detail?.currency;
+      if (currency) {
+        this.selectedCurrency = currency;
+        this.updateDisplay(this.balanceInMsats);
+      }
+    });
+  }
+
+  private async loadBalance(): Promise<void> {
+    if (!this.nwcService.isConnected()) {
+      this.updateDisplay(null);
+      return;
+    }
+
+    try {
+      const balanceMsats = await this.nwcService.getBalance();
+      if (balanceMsats !== null) {
+        this.balanceInMsats = balanceMsats;
+        this.updateDisplay(balanceMsats);
+      } else {
+        this.updateDisplay(null);
+      }
+    } catch (error) {
+      this.systemLogger.error('WalletBalanceDisplay', 'Failed to load balance:', error);
+      this.updateDisplay(null);
+    }
+  }
+
+  private async updateDisplay(balanceMsats: number | null): Promise<void> {
+    const amountEl = this.element.querySelector('.wallet-balance-amount');
+    const fiatAmountEl = this.element.querySelector('.wallet-balance-fiat-amount');
+
+    if (balanceMsats === null || !this.nwcService.isConnected()) {
+      // Not connected - hide display
+      this.element.style.display = 'none';
+      return;
+    }
+
+    // Show display
+    this.element.style.display = 'block';
+
+    if (!this.balanceVisible) {
+      // Hidden state
+      if (amountEl) amountEl.textContent = '••••';
+      if (fiatAmountEl) fiatAmountEl.textContent = '••••';
+      return;
+    }
+
+    // Convert msats to sats
+    const sats = Math.floor(balanceMsats / 1000);
+
+    // Format sats with k/M suffix
+    const formattedSats = this.formatSats(sats);
+    if (amountEl) amountEl.textContent = formattedSats;
+
+    // Convert to selected fiat currency
+    const fiatAmount = await this.exchangeRateService.convertSatsToFiat(sats, this.selectedCurrency);
+    const currencySymbol = this.exchangeRateService.getCurrencySymbol(this.selectedCurrency);
+
+    let formattedFiat: string;
+    if (fiatAmount < 0.01) {
+      formattedFiat = `<${currencySymbol}0.01`;
+    } else {
+      formattedFiat = `${currencySymbol}${fiatAmount.toFixed(2)}`;
+    }
+
+    if (fiatAmountEl) fiatAmountEl.textContent = formattedFiat;
+  }
+
+  private formatSats(sats: number): string {
+    if (sats >= 1000000) {
+      return `${(sats / 1000000).toFixed(1)}M`;
+    } else if (sats >= 1000) {
+      return `${(sats / 1000).toFixed(1)}k`;
+    }
+    return sats.toString();
+  }
+
+  private toggleVisibility(): void {
+    this.balanceVisible = !this.balanceVisible;
+
+    // Persist to localStorage
+    localStorage.setItem(this.STORAGE_KEY, String(this.balanceVisible));
+
+    this.updateEyeIcon();
+    this.updateDisplay(this.balanceInMsats);
+  }
+
+  private updateEyeIcon(): void {
+    const eyeOpen = this.element.querySelector('.eye-open') as HTMLElement;
+    const eyeClosed = this.element.querySelector('.eye-closed') as HTMLElement;
+
+    if (this.balanceVisible) {
+      if (eyeOpen) eyeOpen.style.display = 'block';
+      if (eyeClosed) eyeClosed.style.display = 'none';
+    } else {
+      if (eyeOpen) eyeOpen.style.display = 'none';
+      if (eyeClosed) eyeClosed.style.display = 'block';
+    }
+  }
+
+  private startAutoUpdate(): void {
+    // Update balance every 60 seconds
+    this.updateInterval = window.setInterval(() => {
+      if (this.nwcService.isConnected()) {
+        this.loadBalance();
+      }
+    }, 60000);
+  }
+
+  public destroy(): void {
+    if (this.updateInterval !== null) {
+      clearInterval(this.updateInterval);
+      this.updateInterval = null;
+    }
+  }
+
+  public getElement(): HTMLElement {
+    return this.element;
+  }
+}

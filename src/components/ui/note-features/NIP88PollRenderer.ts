@@ -1,0 +1,253 @@
+/**
+ * NIP88PollRenderer - Renders poll options for kind:1068 (NIP-88) poll events
+ * Displays poll options with vote counts and allows voting
+ */
+
+import type { Event as NostrEvent } from '@nostr-dev-kit/ndk';
+import type { PollData } from '../../poll/PollCreator';
+import { PollOrchestrator } from '../../../services/orchestration/PollOrchestrator';
+import { PollVoteService } from '../../../services/PollVoteService';
+import { AuthService } from '../../../services/AuthService';
+import { SystemLogger } from '../../system/SystemLogger';
+
+export class NIP88PollRenderer {
+  /**
+   * Render NIP-88 poll (kind:1068)
+   * Takes pollData extracted by PollProcessor
+   * Fetches and displays vote counts from kind:1018 responses
+   */
+  static async render(noteElement: HTMLElement, pollData: PollData, event: NostrEvent): Promise<void> {
+    if (!pollData || pollData.options.length === 0) return;
+
+    // Get services
+    const pollOrchestrator = PollOrchestrator.getInstance();
+    const voteService = PollVoteService.getInstance();
+    const authService = AuthService.getInstance();
+    const systemLogger = SystemLogger.getInstance();
+
+    // Get current user
+    const currentUser = authService.getCurrentUser();
+
+    // Check if poll is expired
+    const now = Date.now();
+    const isExpired = pollData.endDate ? (pollData.endDate * 1000) < now : false;
+
+    // Create poll container
+    const pollContainer = document.createElement('div');
+    pollContainer.className = 'nip88-poll';
+
+    // Add poll metadata (multiple choice, end date)
+    if (pollData.multipleChoice || pollData.endDate) {
+      const metaDiv = document.createElement('div');
+      metaDiv.className = 'nip88-poll__meta';
+
+      if (pollData.multipleChoice) {
+        const multiLabel = document.createElement('span');
+        multiLabel.className = 'nip88-poll__meta-item';
+        multiLabel.textContent = 'Multiple choice allowed';
+        metaDiv.appendChild(multiLabel);
+      }
+
+      if (pollData.endDate) {
+        const endLabel = document.createElement('span');
+        endLabel.className = 'nip88-poll__meta-item';
+        const endDate = new Date(pollData.endDate * 1000);
+
+        endLabel.textContent = isExpired
+          ? `Ended ${endDate.toLocaleDateString()}`
+          : `Ends ${endDate.toLocaleDateString()}`;
+
+        if (isExpired) {
+          endLabel.classList.add('nip88-poll__meta-item--expired');
+        }
+
+        metaDiv.appendChild(endLabel);
+      }
+
+      pollContainer.appendChild(metaDiv);
+    }
+
+    // Create options container
+    const optionsDiv = document.createElement('div');
+    optionsDiv.className = 'nip88-poll__options';
+
+    // Render options with placeholder data initially
+    pollData.options.forEach(option => {
+      const optionBtn = document.createElement('button');
+      optionBtn.className = 'nip88-poll__option';
+      optionBtn.dataset.optionId = option.id;
+      optionBtn.innerHTML = `
+        <span class="nip88-poll__option-label">${this.escapeHtml(option.label)}</span>
+        <span class="nip88-poll__option-stats">
+          <span class="nip88-poll__option-count">0 votes</span>
+          <span class="nip88-poll__option-percentage">0%</span>
+        </span>
+        <span class="nip88-poll__option-bar" style="width: 0%"></span>
+      `;
+
+      // Disable if poll expired or user not logged in
+      if (isExpired || !currentUser) {
+        optionBtn.disabled = true;
+      } else {
+        // Add vote handler
+        optionBtn.addEventListener('click', async () => {
+          await this.handleVote(
+            event.id,
+            option.id,
+            pollData,
+            pollContainer,
+            event
+          );
+        });
+      }
+
+      optionsDiv.appendChild(optionBtn);
+    });
+
+    pollContainer.appendChild(optionsDiv);
+
+    // Insert poll container INSIDE event-content, at the END
+    // This ensures it appears after the text content but before media/quoted notes
+    const contentDiv = noteElement.querySelector('.event-content');
+
+    if (contentDiv) {
+      // Wrap existing content in a .poll-question div for targeted styling
+      const pollQuestionDiv = document.createElement('div');
+      pollQuestionDiv.className = 'poll-question';
+
+      // Move all existing content into the wrapper
+      while (contentDiv.firstChild) {
+        pollQuestionDiv.appendChild(contentDiv.firstChild);
+      }
+
+      // Append wrapper and poll to content div
+      contentDiv.appendChild(pollQuestionDiv);
+      contentDiv.appendChild(pollContainer);
+    } else {
+      // Fallback: insert before ISL
+      const isl = noteElement.querySelector('.isl');
+      if (isl) {
+        isl.before(pollContainer);
+      } else {
+        noteElement.appendChild(pollContainer);
+      }
+    }
+
+    // Fetch and display vote counts
+    try {
+      const results = await pollOrchestrator.fetchPollResults(
+        event.id,
+        pollData.options,
+        currentUser?.pubkey
+      );
+
+      this.updatePollResults(pollContainer, results, pollData);
+    } catch (error) {
+      systemLogger.error('NIP88PollRenderer', `Failed to fetch poll results: ${error}`);
+    }
+  }
+
+  /**
+   * Handle vote button click
+   */
+  private static async handleVote(
+    pollEventId: string,
+    optionId: string,
+    pollData: PollData,
+    pollContainer: HTMLElement,
+    event: NostrEvent
+  ): Promise<void> {
+    const voteService = PollVoteService.getInstance();
+    const pollOrchestrator = PollOrchestrator.getInstance();
+    const authService = AuthService.getInstance();
+    const systemLogger = SystemLogger.getInstance();
+
+    const currentUser = authService.getCurrentUser();
+    if (!currentUser) return;
+
+    // Determine relays (use poll's relay tags or defaults)
+    const relays = pollData.relayUrls && pollData.relayUrls.length > 0
+      ? pollData.relayUrls
+      : ['wss://relay.damus.io', 'wss://relay.primal.net'];
+
+    // Cast vote
+    const success = await voteService.castVote({
+      pollEventId,
+      optionIds: [optionId], // For now, single choice only
+      relays
+    });
+
+    if (success) {
+      // Clear cache and refetch results
+      pollOrchestrator.clearCache(pollEventId);
+
+      try {
+        const results = await pollOrchestrator.fetchPollResults(
+          pollEventId,
+          pollData.options,
+          currentUser.pubkey
+        );
+
+        this.updatePollResults(pollContainer, results, pollData);
+      } catch (error) {
+        systemLogger.error('NIP88PollRenderer', `Failed to refresh poll results: ${error}`);
+      }
+    }
+  }
+
+  /**
+   * Update poll UI with vote counts
+   */
+  private static updatePollResults(
+    pollContainer: HTMLElement,
+    results: any,
+    pollData: PollData
+  ): void {
+    const totalVotes = results.totalVotes;
+
+    pollData.options.forEach(option => {
+      const optionBtn = pollContainer.querySelector(
+        `.nip88-poll__option[data-option-id="${option.id}"]`
+      ) as HTMLElement;
+
+      if (!optionBtn) return;
+
+      const resultOption = results.options.find((o: any) => o.id === option.id);
+      const voteCount = resultOption?.voteCount || 0;
+      const percentage = totalVotes > 0 ? Math.round((voteCount / totalVotes) * 100) : 0;
+
+      // Update stats
+      const countSpan = optionBtn.querySelector('.nip88-poll__option-count');
+      const percentageSpan = optionBtn.querySelector('.nip88-poll__option-percentage');
+      const barSpan = optionBtn.querySelector('.nip88-poll__option-bar') as HTMLElement;
+
+      if (countSpan) {
+        countSpan.textContent = `${voteCount} vote${voteCount !== 1 ? 's' : ''}`;
+      }
+
+      if (percentageSpan) {
+        percentageSpan.textContent = `${percentage}%`;
+      }
+
+      if (barSpan) {
+        barSpan.style.width = `${percentage}%`;
+      }
+
+      // Highlight if user voted for this option
+      if (results.userVote === option.id) {
+        optionBtn.classList.add('nip88-poll__option--voted');
+      } else {
+        optionBtn.classList.remove('nip88-poll__option--voted');
+      }
+    });
+  }
+
+  /**
+   * Escape HTML to prevent XSS
+   */
+  private static escapeHtml(text: string): string {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+}

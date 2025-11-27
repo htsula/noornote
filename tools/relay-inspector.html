@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Relay Inspector</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #1a1a2e;
+      color: #eee;
+    }
+    h1 { color: #ff79c6; margin-bottom: 20px; }
+    .form-group { margin-bottom: 15px; }
+    label { display: block; margin-bottom: 5px; color: #bd93f9; }
+    input, textarea, select {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #44475a;
+      border-radius: 4px;
+      background: #282a36;
+      color: #f8f8f2;
+      font-family: monospace;
+    }
+    input:focus, textarea:focus { outline: none; border-color: #ff79c6; }
+    button {
+      background: #ff79c6;
+      color: #282a36;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: bold;
+      margin-right: 10px;
+    }
+    button:hover { background: #ff92d0; }
+    button:disabled { background: #6272a4; cursor: not-allowed; }
+    .output {
+      margin-top: 20px;
+      background: #282a36;
+      border: 1px solid #44475a;
+      border-radius: 4px;
+      padding: 15px;
+      overflow-x: auto;
+    }
+    pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-all;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .status { color: #50fa7b; margin-bottom: 10px; }
+    .error { color: #ff5555; }
+    .info { color: #8be9fd; font-size: 12px; margin-top: 5px; }
+    .presets { margin-bottom: 20px; }
+    .presets button { background: #6272a4; margin-bottom: 5px; }
+    .presets button:hover { background: #7c8db5; }
+    .row { display: flex; gap: 15px; }
+    .row .form-group { flex: 1; }
+    .tag-info { background: #44475a; padding: 10px; border-radius: 4px; margin-top: 10px; font-size: 12px; }
+    .summary { background: #44475a; padding: 15px; border-radius: 4px; margin-bottom: 15px; }
+    .summary h3 { margin: 0 0 10px 0; color: #ff79c6; }
+    .summary-item { margin: 5px 0; }
+    .copy-btn { background: #6272a4; font-size: 12px; padding: 5px 10px; }
+  </style>
+</head>
+<body>
+  <h1>🔍 Relay Inspector</h1>
+
+  <div class="presets">
+    <strong>Presets:</strong><br>
+    <button onclick="loadPreset('follows')">Follows (kind:3)</button>
+    <button onclick="loadPreset('mutes')">Mutes (kind:10000)</button>
+    <button onclick="loadPreset('bookmarks')">Bookmarks (kind:10003)</button>
+    <button onclick="loadPreset('profile')">Profile (kind:0)</button>
+    <button onclick="loadPreset('relaylist')">Relay List (kind:10002)</button>
+  </div>
+
+  <div class="form-group">
+    <label>Relay URLs (one per line)</label>
+    <textarea id="relays" rows="4">wss://relay.damus.io
+wss://nos.lol
+wss://relay.nostr.band
+wss://purplepag.es</textarea>
+  </div>
+
+  <div class="row">
+    <div class="form-group">
+      <label>Author Pubkey (npub oder hex)</label>
+      <input type="text" id="pubkey" placeholder="npub1... oder hex">
+      <div class="info">Leave empty to query all authors</div>
+    </div>
+    <div class="form-group">
+      <label>Event Kinds (comma-separated)</label>
+      <input type="text" id="kinds" value="10003" placeholder="e.g. 1,3,10000">
+    </div>
+    <div class="form-group">
+      <label>Limit</label>
+      <input type="number" id="limit" value="5" min="1" max="100">
+    </div>
+  </div>
+
+  <div class="form-group">
+    <label>Additional Filter (JSON, optional)</label>
+    <input type="text" id="extraFilter" placeholder='e.g. {"#e": ["eventid..."]}'>
+  </div>
+
+  <button id="fetchBtn" onclick="fetchEvents()">Fetch Events</button>
+  <button onclick="clearOutput()">Clear</button>
+
+  <div class="output">
+    <div id="status" class="status"></div>
+    <div id="summary"></div>
+    <pre id="result">Results will appear here...</pre>
+  </div>
+
+  <div class="tag-info">
+    <strong>Common NIP-51 Tag Types:</strong><br>
+    <code>p</code> = pubkey (follows, mutes) |
+    <code>e</code> = event ID (bookmarks, muted threads) |
+    <code>a</code> = article reference |
+    <code>t</code> = hashtag |
+    <code>r</code> = URL |
+    <code>word</code> = muted word
+  </div>
+
+  <script>
+    // Bech32 decoding for npub
+    const BECH32_ALPHABET = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
+
+    function bech32Decode(str) {
+      const lowered = str.toLowerCase();
+      let pos = lowered.lastIndexOf('1');
+      if (pos < 1 || pos + 7 > lowered.length) throw new Error('Invalid bech32');
+
+      const prefix = lowered.slice(0, pos);
+      const data = [];
+      for (let i = pos + 1; i < lowered.length; i++) {
+        const c = BECH32_ALPHABET.indexOf(lowered[i]);
+        if (c === -1) throw new Error('Invalid bech32 character');
+        data.push(c);
+      }
+
+      // Remove checksum (last 6 chars)
+      const words = data.slice(0, -6);
+
+      // Convert 5-bit words to 8-bit bytes
+      let bits = 0;
+      let value = 0;
+      const bytes = [];
+      for (const word of words) {
+        value = (value << 5) | word;
+        bits += 5;
+        while (bits >= 8) {
+          bits -= 8;
+          bytes.push((value >> bits) & 0xff);
+        }
+      }
+
+      return { prefix, bytes };
+    }
+
+    function npubToHex(npub) {
+      if (!npub.startsWith('npub1')) throw new Error('Not an npub');
+      const { bytes } = bech32Decode(npub);
+      return bytes.map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    function resolvePubkey(input) {
+      if (!input) return null;
+      if (input.startsWith('npub1')) {
+        try {
+          return npubToHex(input);
+        } catch (e) {
+          throw new Error('Invalid npub: ' + e.message);
+        }
+      }
+      // Assume hex
+      if (/^[0-9a-fA-F]{64}$/.test(input)) {
+        return input.toLowerCase();
+      }
+      throw new Error('Invalid pubkey format (must be npub1... or 64 char hex)');
+    }
+
+    const DEFAULT_RELAYS = [
+      'wss://relay.damus.io',
+      'wss://nos.lol',
+      'wss://relay.nostr.band',
+      'wss://purplepag.es'
+    ];
+
+    function loadPreset(type) {
+      const presets = {
+        follows: { kinds: '3', limit: 1 },
+        mutes: { kinds: '10000', limit: 1 },
+        bookmarks: { kinds: '10003', limit: 1 },
+        profile: { kinds: '0', limit: 1 },
+        relaylist: { kinds: '10002', limit: 1 }
+      };
+      const p = presets[type];
+      document.getElementById('kinds').value = p.kinds;
+      document.getElementById('limit').value = p.limit;
+    }
+
+    function setStatus(msg, isError = false) {
+      const el = document.getElementById('status');
+      el.textContent = msg;
+      el.className = isError ? 'status error' : 'status';
+    }
+
+    function clearOutput() {
+      document.getElementById('result').textContent = 'Results will appear here...';
+      document.getElementById('status').textContent = '';
+      document.getElementById('summary').innerHTML = '';
+    }
+
+    async function fetchEvents() {
+      const btn = document.getElementById('fetchBtn');
+      btn.disabled = true;
+
+      const relaysText = document.getElementById('relays').value;
+      const relays = relaysText.split('\n').map(r => r.trim()).filter(r => r.startsWith('wss://'));
+
+      let pubkey = null;
+      const pubkeyInput = document.getElementById('pubkey').value.trim();
+      if (pubkeyInput) {
+        try {
+          pubkey = resolvePubkey(pubkeyInput);
+        } catch (e) {
+          setStatus(e.message, true);
+          btn.disabled = false;
+          return;
+        }
+      }
+      const kindsText = document.getElementById('kinds').value;
+      const kinds = kindsText.split(',').map(k => parseInt(k.trim())).filter(k => !isNaN(k));
+      const limit = parseInt(document.getElementById('limit').value) || 5;
+      const extraFilterText = document.getElementById('extraFilter').value.trim();
+
+      let extraFilter = {};
+      if (extraFilterText) {
+        try {
+          extraFilter = JSON.parse(extraFilterText);
+        } catch (e) {
+          setStatus('Invalid extra filter JSON: ' + e.message, true);
+          btn.disabled = false;
+          return;
+        }
+      }
+
+      if (relays.length === 0) {
+        setStatus('No valid relay URLs', true);
+        btn.disabled = false;
+        return;
+      }
+
+      if (kinds.length === 0) {
+        setStatus('No valid kinds', true);
+        btn.disabled = false;
+        return;
+      }
+
+      const filter = { kinds, limit, ...extraFilter };
+      if (pubkey) {
+        filter.authors = [pubkey];
+      }
+
+      setStatus(`Connecting to ${relays.length} relays...`);
+
+      const allEvents = new Map();
+      const relayResults = {};
+      let completed = 0;
+
+      const timeout = 8000;
+
+      await Promise.all(relays.map(relayUrl => {
+        return new Promise((resolve) => {
+          relayResults[relayUrl] = { status: 'connecting', events: 0 };
+
+          try {
+            const ws = new WebSocket(relayUrl);
+            const subId = 'inspector-' + Math.random().toString(36).slice(2, 8);
+            let resolved = false;
+
+            const timeoutId = setTimeout(() => {
+              if (!resolved) {
+                resolved = true;
+                relayResults[relayUrl].status = 'timeout';
+                ws.close();
+                resolve();
+              }
+            }, timeout);
+
+            ws.onopen = () => {
+              relayResults[relayUrl].status = 'connected';
+              ws.send(JSON.stringify(['REQ', subId, filter]));
+              updateStatus();
+            };
+
+            ws.onmessage = (msg) => {
+              try {
+                const data = JSON.parse(msg.data);
+                if (data[0] === 'EVENT' && data[2]) {
+                  const event = data[2];
+                  allEvents.set(event.id, { event, relay: relayUrl });
+                  relayResults[relayUrl].events++;
+                  updateStatus();
+                } else if (data[0] === 'EOSE') {
+                  relayResults[relayUrl].status = 'done';
+                  clearTimeout(timeoutId);
+                  ws.close();
+                  if (!resolved) {
+                    resolved = true;
+                    resolve();
+                  }
+                } else if (data[0] === 'NOTICE') {
+                  console.log('NOTICE from', relayUrl, data[1]);
+                }
+              } catch (e) {}
+            };
+
+            ws.onerror = () => {
+              relayResults[relayUrl].status = 'error';
+              clearTimeout(timeoutId);
+              if (!resolved) {
+                resolved = true;
+                resolve();
+              }
+            };
+
+            ws.onclose = () => {
+              clearTimeout(timeoutId);
+              if (!resolved) {
+                resolved = true;
+                resolve();
+              }
+            };
+          } catch (e) {
+            relayResults[relayUrl].status = 'error';
+            resolve();
+          }
+        });
+      }));
+
+      function updateStatus() {
+        const statusParts = Object.entries(relayResults).map(([url, r]) => {
+          const shortUrl = url.replace('wss://', '').split('/')[0];
+          return `${shortUrl}: ${r.status} (${r.events})`;
+        });
+        setStatus(statusParts.join(' | '));
+      }
+
+      updateStatus();
+
+      // Sort by created_at desc
+      const events = Array.from(allEvents.values())
+        .sort((a, b) => b.event.created_at - a.event.created_at);
+
+      // Build summary
+      let summaryHtml = '';
+      if (events.length > 0) {
+        const latestEvent = events[0].event;
+        const tagCounts = {};
+        latestEvent.tags.forEach(tag => {
+          const type = tag[0];
+          tagCounts[type] = (tagCounts[type] || 0) + 1;
+        });
+
+        summaryHtml = `
+          <div class="summary">
+            <h3>Latest Event Summary</h3>
+            <div class="summary-item"><strong>Kind:</strong> ${latestEvent.kind}</div>
+            <div class="summary-item"><strong>Created:</strong> ${new Date(latestEvent.created_at * 1000).toLocaleString()}</div>
+            <div class="summary-item"><strong>Total Tags:</strong> ${latestEvent.tags.length}</div>
+            <div class="summary-item"><strong>Tag Types:</strong> ${Object.entries(tagCounts).map(([k,v]) => `${k}:${v}`).join(', ') || 'none'}</div>
+            <div class="summary-item"><strong>Content:</strong> ${latestEvent.content ? (latestEvent.content.length > 50 ? latestEvent.content.slice(0, 50) + '... (' + latestEvent.content.length + ' chars)' : latestEvent.content) : '(empty)'}</div>
+            <div class="summary-item"><strong>Event ID:</strong> <code>${latestEvent.id}</code></div>
+            <button class="copy-btn" onclick="copyToClipboard('${latestEvent.id}')">Copy ID</button>
+            <button class="copy-btn" onclick="copyEventJson()">Copy Full JSON</button>
+          </div>
+        `;
+      }
+      document.getElementById('summary').innerHTML = summaryHtml;
+
+      // Format output
+      const output = {
+        query: { filter, relays },
+        relayStatus: relayResults,
+        totalEvents: events.length,
+        events: events.map(e => ({
+          ...e.event,
+          _fromRelay: e.relay,
+          _createdAtHuman: new Date(e.event.created_at * 1000).toISOString()
+        }))
+      };
+
+      document.getElementById('result').textContent = JSON.stringify(output, null, 2);
+      btn.disabled = false;
+    }
+
+    function copyToClipboard(text) {
+      navigator.clipboard.writeText(text);
+    }
+
+    function copyEventJson() {
+      const result = document.getElementById('result').textContent;
+      try {
+        const data = JSON.parse(result);
+        if (data.events && data.events[0]) {
+          navigator.clipboard.writeText(JSON.stringify(data.events[0], null, 2));
+        }
+      } catch (e) {}
+    }
+
+    // Try to load pubkey from localStorage
+    try {
+      const stored = localStorage.getItem('noornote_auth_state');
+      if (stored) {
+        const auth = JSON.parse(stored);
+        if (auth.pubkey) {
+          document.getElementById('pubkey').value = auth.pubkey;
+        }
+      }
+    } catch (e) {}
+  </script>
+</body>
+</html>
