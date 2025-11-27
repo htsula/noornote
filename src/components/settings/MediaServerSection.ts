@@ -1,0 +1,391 @@
+/**
+ * MediaServerSection Component
+ * Manages media server configuration and NSFW display settings
+ *
+ * @purpose Configure media upload server (Blossom/NIP-96) and sensitive content display
+ * @used-by SettingsView
+ */
+
+import { SettingsSection } from './SettingsSection';
+import { Switch } from '../ui/Switch';
+
+interface MediaServerSettings {
+  url: string;
+  protocol: 'blossom' | 'nip96';
+}
+
+interface SensitiveMediaSettings {
+  displayNSFW: boolean;
+}
+
+export class MediaServerSection extends SettingsSection {
+  private mediaServerSettings: MediaServerSettings;
+  private sensitiveMediaSettings: SensitiveMediaSettings;
+  private readonly mediaServerStorageKey = 'noornote_media_server';
+  private readonly sensitiveMediaStorageKey = 'noornote_sensitive_media';
+
+  constructor() {
+    super('media');
+    this.mediaServerSettings = this.loadMediaServerSettings();
+    this.sensitiveMediaSettings = this.loadSensitiveMediaSettings();
+  }
+
+  /**
+   * Load media server settings from storage
+   */
+  private loadMediaServerSettings(): MediaServerSettings {
+    try {
+      const stored = localStorage.getItem(this.mediaServerStorageKey);
+      if (stored) {
+        return JSON.parse(stored);
+      }
+    } catch (error) {
+      console.warn('Failed to load media server settings:', error);
+    }
+
+    return {
+      url: 'https://blossom.nostr.build',
+      protocol: 'blossom'
+    };
+  }
+
+  /**
+   * Save media server settings to storage
+   */
+  private saveMediaServerSettings(): void {
+    try {
+      localStorage.setItem(this.mediaServerStorageKey, JSON.stringify(this.mediaServerSettings));
+    } catch (error) {
+      console.warn('Failed to save media server settings:', error);
+    }
+  }
+
+  /**
+   * Load sensitive media settings from storage
+   */
+  private loadSensitiveMediaSettings(): SensitiveMediaSettings {
+    try {
+      const stored = localStorage.getItem(this.sensitiveMediaStorageKey);
+      if (stored) {
+        return JSON.parse(stored);
+      }
+    } catch (error) {
+      console.warn('Failed to load sensitive media settings:', error);
+    }
+
+    return { displayNSFW: false };
+  }
+
+  /**
+   * Save sensitive media settings to storage
+   */
+  private saveSensitiveMediaSettings(): void {
+    try {
+      localStorage.setItem(this.sensitiveMediaStorageKey, JSON.stringify(this.sensitiveMediaSettings));
+    } catch (error) {
+      console.warn('Failed to save sensitive media settings:', error);
+    }
+  }
+
+  /**
+   * Get protocol for known servers
+   */
+  private getProtocolForServer(url: string): 'blossom' | 'nip96' {
+    const blossomServers = [
+      'blossom.nostr.build',
+      'blossom.band',
+      'blossom.primal.net'
+    ];
+
+    const nip96Servers = [
+      'nostr.build',
+      'image.nostr.build'
+    ];
+
+    if (blossomServers.some(server => url.includes(server))) {
+      return 'blossom';
+    }
+
+    if (nip96Servers.some(server => url.includes(server))) {
+      return 'nip96';
+    }
+
+    return 'nip96';
+  }
+
+  /**
+   * Mount section content into the DOM
+   */
+  public mount(parentContainer: HTMLElement): void {
+    const contentContainer = this.getContentContainer(parentContainer);
+    if (!contentContainer) return;
+
+    contentContainer.innerHTML = this.renderContent();
+    this.bindListeners(contentContainer);
+  }
+
+  /**
+   * Render media settings content
+   */
+  private renderContent(): string {
+    return `
+      <div class="media-settings">
+        <!-- Media Server Subsection -->
+        <div class="media-subsection">
+          <h3 class="subsection-title">Media Server</h3>
+          ${this.renderMediaServer()}
+        </div>
+
+        <!-- Sensitive Media Subsection -->
+        <div class="media-subsection">
+          <h3 class="subsection-title">Sensitive Media</h3>
+          ${this.renderSensitiveMedia()}
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Render media server subsection
+   */
+  private renderMediaServer(): string {
+    const popularServers = [
+      { url: 'https://nostr.build', name: 'nostr.build (Most popular, NIP-96)', protocol: 'nip96' as const },
+      { url: 'https://blossom.nostr.build', name: 'blossom.nostr.build (Blossom, 100 MiB)', protocol: 'blossom' as const },
+      { url: 'https://blossom.band', name: 'blossom.band (Blossom, 50 MiB)', protocol: 'blossom' as const },
+      { url: 'https://blossom.primal.net', name: 'blossom.primal.net (Blossom)', protocol: 'blossom' as const }
+    ];
+
+    return `
+      <div class="media-server-settings">
+        <div class="media-server-info">
+          <p>Choose where to upload images, videos, and other media files. Noornote supports both Blossom and NIP-96 protocols.</p>
+        </div>
+
+        <div class="media-server-selector">
+          <label for="media-server-url">Media Server URL:</label>
+          <select id="media-server-url" class="media-server-dropdown">
+            ${popularServers.map(server => `
+              <option value="${server.url}" ${this.mediaServerSettings.url === server.url ? 'selected' : ''}>
+                ${server.name}
+              </option>
+            `).join('')}
+            <option value="custom" ${!popularServers.some(s => s.url === this.mediaServerSettings.url) ? 'selected' : ''}>
+              Custom...
+            </option>
+          </select>
+        </div>
+
+        <div class="media-server-custom ${!popularServers.some(s => s.url === this.mediaServerSettings.url) ? '' : 'hidden'}" id="custom-server-section">
+          <label for="custom-media-server-url">Custom Server URL:</label>
+          <input
+            type="text"
+            id="custom-media-server-url"
+            class="media-server-input"
+            placeholder="https://your-server.com"
+            value="${!popularServers.some(s => s.url === this.mediaServerSettings.url) ? this.mediaServerSettings.url : ''}"
+          />
+        </div>
+
+        <div class="media-server-protocol">
+          <label>Protocol:</label>
+          <div class="protocol-switch">
+            <button
+              class="protocol-btn ${this.mediaServerSettings.protocol === 'blossom' ? 'active' : ''}"
+              data-protocol="blossom"
+            >
+              Blossom
+            </button>
+            <button
+              class="protocol-btn ${this.mediaServerSettings.protocol === 'nip96' ? 'active' : ''}"
+              data-protocol="nip96"
+            >
+              NIP-96
+            </button>
+          </div>
+          <p class="protocol-note">Most servers auto-detect. Use Blossom for newer servers, NIP-96 for legacy.</p>
+        </div>
+
+        <div class="media-server-save">
+          <button class="btn btn--medium" id="save-media-server-btn">Save Settings</button>
+          <div class="save-message" id="media-save-message"></div>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Render sensitive media subsection
+   */
+  private renderSensitiveMedia(): string {
+    return `
+      <div class="sensitive-media-settings">
+        <div class="sensitive-media-info">
+          <p>Control how sensitive content (NSFW) is displayed. When disabled, NSFW images and videos will be blurred.</p>
+        </div>
+
+        <div class="sensitive-media-switch-container" id="sensitive-media-switch-container">
+          <!-- Switch will be mounted here -->
+        </div>
+
+        <div class="sensitive-media-save">
+          <button class="btn btn--medium" id="save-sensitive-media-btn">Save Settings</button>
+          <div class="save-message" id="sensitive-save-message"></div>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Bind event listeners
+   */
+  private bindListeners(contentContainer: HTMLElement): void {
+    this.bindMediaServerListeners(contentContainer);
+    this.bindSensitiveMediaListeners(contentContainer);
+  }
+
+  /**
+   * Bind media server event listeners
+   */
+  private bindMediaServerListeners(contentContainer: HTMLElement): void {
+    const dropdown = contentContainer.querySelector('#media-server-url') as HTMLSelectElement;
+    const customSection = contentContainer.querySelector('#custom-server-section');
+    const customInput = contentContainer.querySelector('#custom-media-server-url') as HTMLInputElement;
+
+    dropdown?.addEventListener('change', () => {
+      if (dropdown.value === 'custom') {
+        customSection?.classList.remove('hidden');
+      } else {
+        customSection?.classList.add('hidden');
+        this.mediaServerSettings.url = dropdown.value;
+
+        const detectedProtocol = this.getProtocolForServer(dropdown.value);
+        this.mediaServerSettings.protocol = detectedProtocol;
+
+        const protocolButtons = contentContainer.querySelectorAll('.protocol-btn');
+        protocolButtons.forEach(btn => {
+          const btnProtocol = (btn as HTMLElement).dataset.protocol;
+          if (btnProtocol === detectedProtocol) {
+            btn.classList.add('active');
+          } else {
+            btn.classList.remove('active');
+          }
+        });
+      }
+    });
+
+    customInput?.addEventListener('input', () => {
+      this.mediaServerSettings.url = customInput.value.trim();
+    });
+
+    const protocolButtons = contentContainer.querySelectorAll('.protocol-btn');
+    protocolButtons.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const button = e.currentTarget as HTMLElement;
+        const protocol = button.dataset.protocol as 'blossom' | 'nip96';
+
+        if (!protocol) return;
+
+        this.mediaServerSettings.protocol = protocol;
+
+        protocolButtons.forEach(b => b.classList.remove('active'));
+        button.classList.add('active');
+      });
+    });
+
+    const saveBtn = contentContainer.querySelector('#save-media-server-btn');
+    saveBtn?.addEventListener('click', () => this.handleMediaServerSave(contentContainer));
+  }
+
+  /**
+   * Bind sensitive media event listeners
+   */
+  private bindSensitiveMediaListeners(contentContainer: HTMLElement): void {
+    const switchContainer = contentContainer.querySelector('#sensitive-media-switch-container');
+    if (!switchContainer) return;
+
+    const nsfwSwitch = new Switch({
+      label: 'Display sensitive media',
+      checked: this.sensitiveMediaSettings.displayNSFW,
+      onChange: (checked) => {
+        this.sensitiveMediaSettings.displayNSFW = checked;
+      }
+    });
+
+    switchContainer.innerHTML = nsfwSwitch.render();
+    nsfwSwitch.setupEventListeners(switchContainer as HTMLElement);
+
+    const saveBtn = contentContainer.querySelector('#save-sensitive-media-btn');
+    saveBtn?.addEventListener('click', () => this.handleSensitiveMediaSave(contentContainer));
+  }
+
+  /**
+   * Handle media server save
+   */
+  private handleMediaServerSave(contentContainer: HTMLElement): void {
+    if (!this.mediaServerSettings.url) {
+      this.showMediaMessage(contentContainer, 'Please enter a media server URL', 'error');
+      return;
+    }
+
+    if (!this.mediaServerSettings.url.startsWith('http://') && !this.mediaServerSettings.url.startsWith('https://')) {
+      this.showMediaMessage(contentContainer, 'Media server URL must start with http:// or https://', 'error');
+      return;
+    }
+
+    this.saveMediaServerSettings();
+    this.showMediaMessage(contentContainer, 'Media server settings saved!', 'success');
+  }
+
+  /**
+   * Handle sensitive media save
+   */
+  private handleSensitiveMediaSave(contentContainer: HTMLElement): void {
+    this.saveSensitiveMediaSettings();
+
+    window.dispatchEvent(new CustomEvent('nsfw-preference-changed', {
+      detail: { displayNSFW: this.sensitiveMediaSettings.displayNSFW }
+    }));
+
+    this.showSensitiveMediaMessage(contentContainer, 'Sensitive media settings saved!', 'success');
+  }
+
+  /**
+   * Show media server message
+   */
+  private showMediaMessage(contentContainer: HTMLElement, message: string, type: 'success' | 'error'): void {
+    const messageEl = contentContainer.querySelector('#media-save-message');
+    if (!messageEl) return;
+
+    messageEl.textContent = message;
+    messageEl.className = `save-message ${type}`;
+
+    setTimeout(() => {
+      messageEl.textContent = '';
+      messageEl.className = 'save-message';
+    }, 5000);
+  }
+
+  /**
+   * Show sensitive media message
+   */
+  private showSensitiveMediaMessage(contentContainer: HTMLElement, message: string, type: 'success' | 'error'): void {
+    const messageEl = contentContainer.querySelector('#sensitive-save-message');
+    if (!messageEl) return;
+
+    messageEl.textContent = message;
+    messageEl.className = `save-message ${type}`;
+
+    setTimeout(() => {
+      messageEl.textContent = '';
+      messageEl.className = 'save-message';
+    }, 5000);
+  }
+
+  /**
+   * Unmount section and cleanup
+   */
+  public unmount(): void {
+    // Cleanup if needed
+  }
+}

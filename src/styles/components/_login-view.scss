@@ -1,0 +1,245 @@
+/**
+ * Auth Login Card - Smart input for login
+ * Displays in .primary-content when user not logged in
+ */
+
+@use '../abstracts/variables' as *;
+@use '../abstracts/mixins' as *;
+
+.auth-login-card {
+  max-width: 500px;
+  margin: $gap * 4 auto;
+  background: $color-2;
+  border-radius: calc($gap / 2);
+  padding: $gap * 3;
+
+  h2 {
+    margin: 0 0 calc($gap / 4) 0;
+    font-size: 28px;
+    color: $color-5;
+    text-align: center;
+  }
+
+  .auth-subtitle {
+    margin: 0 0 $gap * 2 0;
+    color: $color-3;
+    font-size: 16px;
+    text-align: center;
+  }
+}
+
+// Auth Section (grouped login options)
+.auth-section {
+  border: 1px solid $color-3;
+  border-radius: calc($gap / 2);
+  padding: calc($gap * 2);
+  margin: calc($gap * 2) 0;
+
+  h3 {
+    margin: 0 0 $gap 0;
+    font-size: 18px;
+    color: $color-5;
+  }
+
+  // Primary auth section (no border, prominent)
+  &--primary {
+    border: none;
+    padding: 0;
+    margin: $gap * 2 0;
+  }
+}
+
+// Primary Action (large button)
+.auth-primary-action {
+  text-align: center;
+
+  .btn--large {
+    width: 100%;
+    padding: $gap * 1.5 $gap * 2;
+    font-size: 18px;
+    font-weight: 600;
+  }
+
+  .auth-hint {
+    margin: $gap 0 0;
+    color: $color-3;
+    font-size: 14px;
+
+    a {
+      color: $color-4;
+      text-decoration: none;
+
+      &:hover {
+        text-decoration: underline;
+      }
+    }
+  }
+
+  &--disabled {
+    .btn {
+      background: $color-2;
+      color: $color-3;
+      cursor: not-allowed;
+    }
+  }
+}
+
+// Input Group (input + button)
+.auth-input-group {
+  display: flex;
+  gap: $gap;
+  margin-bottom: calc($gap / 2);
+
+  .auth-input {
+    flex: 1;
+    padding: $gap;
+    background: $color-1;
+    border: 1px solid $color-3;
+    border-radius: calc($gap / 4);
+    color: $color-5;
+    font-size: 14px;
+    font-family: monospace;
+
+    &:focus {
+      outline: none;
+      border-color: $color-4;
+    }
+
+    &::placeholder {
+      color: $color-3;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+  }
+
+  .btn {
+    padding: $gap calc($gap * 2);
+    white-space: nowrap;
+  }
+}
+
+// Key Signer Section
+.auth-key-signer {
+  text-align: center;
+
+  .btn {
+    margin-bottom: calc($gap / 2);
+  }
+
+  .auth-hint {
+    margin: 0;
+    color: $color-3;
+    font-size: 14px;
+  }
+}
+
+// Smart Input (single field)
+.auth-smart-input {
+  display: flex;
+  gap: $gap;
+  margin-bottom: $gap;
+
+  .auth-input {
+    flex: 1;
+    padding: $gap;
+    background: $color-1;
+    border: 1px solid $color-3;
+    border-radius: calc($gap / 4);
+    color: $color-5;
+    font-size: 14px;
+    font-family: monospace;
+
+    &:focus {
+      outline: none;
+      border-color: $color-4;
+    }
+
+    &::placeholder {
+      color: $color-3;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+  }
+
+  .btn {
+    padding: $gap calc($gap * 2);
+    white-space: nowrap;
+  }
+}
+
+// Divider
+.auth-divider {
+  position: relative;
+  text-align: center;
+  margin: $gap * 2 0;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: $color-3;
+  }
+
+  span {
+    position: relative;
+    display: inline-block;
+    padding: 0 $gap;
+    background: $color-2;
+    color: $color-3;
+    font-size: 14px;
+  }
+}
+
+// Create New Account
+.auth-create {
+  text-align: center;
+
+  .btn {
+    width: 100%;
+    padding: $gap * 1.5;
+  }
+}
+
+// Key Display
+.auth-keys-display {
+  display: flex;
+  flex-direction: column;
+  gap: $gap * 1.5;
+  margin: $gap * 2 0;
+}
+
+.auth-key-item {
+  background: $color-1;
+  border: 1px solid $color-3;
+  border-radius: calc($gap / 2);
+  padding: $gap;
+
+  label {
+    display: block;
+    margin-bottom: calc($gap / 2);
+    font-size: 14px;
+    color: $color-5;
+    font-weight: 500;
+  }
+
+  .auth-key-input {
+    margin-bottom: calc($gap / 2);
+  }
+
+  &.auth-key-item--critical {
+    border-color: $color-4;
+    background: rgba($color-4, 0.05);
+  }
+}
+
+.auth-warning {
+  padding: $gap * 1.5;
+  background: rgba($color-4, 0.1);
+  border: 1px solid $color-4;
+  border-radius: calc($gap / 2);
+  color: $color-5;
+  font-size: 14px;
+  line-height: 1.6;
+  margin: $gap * 2 0;
+}

@@ -1,0 +1,52 @@
+/**
+ * Pulsate Animation Atom
+ * Central loading/pulsing animation for all async loading states
+ *
+ * Usage:
+ * - Apply .pulsate class directly to elements
+ * - Or use @include pulsate() mixin for custom duration
+ */
+
+@use '../abstracts/variables' as *;
+
+// ============================================================================
+// KEYFRAMES
+// ============================================================================
+
+@keyframes pulsate {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+// ============================================================================
+// MIXIN
+// ============================================================================
+
+/// Pulsate animation mixin
+/// @param {Number} $duration [2.5s] - Animation duration
+/// @param {Number} $min-opacity [0.5] - Minimum opacity at 50% keyframe
+@mixin pulsate($duration: 2.5s, $min-opacity: 0.5) {
+  animation: pulsate $duration ease-in-out infinite;
+}
+
+// ============================================================================
+// UTILITY CLASS
+// ============================================================================
+
+.pulsate {
+  @include pulsate();
+
+  // Modifier for faster pulsing (e.g. urgent loading states)
+  &--fast {
+    @include pulsate(1.5s);
+  }
+
+  // Modifier for slower pulsing (e.g. background processes)
+  &--slow {
+    @include pulsate(4s);
+  }
+}

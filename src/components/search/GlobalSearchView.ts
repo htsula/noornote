@@ -1,0 +1,393 @@
+/**
+ * GlobalSearchView - Full-text search interface
+ * Displays in .aside.secondary-content
+ * Uses SearchResultsView (modular component)
+ */
+
+import { SearchOrchestrator, type SearchOptions } from '../../services/orchestration/SearchOrchestrator';
+import { MuteOrchestrator } from '../../services/orchestration/MuteOrchestrator';
+import { AuthService } from '../../services/AuthService';
+import { SearchResultsView } from './SearchResultsView';
+import { Router } from '../../services/Router';
+import { EventBus } from '../../services/EventBus';
+import { SystemLogger } from '../system/SystemLogger';
+import { encodeNevent } from '../../services/NostrToolsAdapter';
+import type { Event as NostrEvent } from '@nostr-dev-kit/ndk';
+
+export class GlobalSearchView {
+  private container: HTMLElement;
+  private searchOrchestrator: SearchOrchestrator;
+  private muteOrchestrator: MuteOrchestrator;
+  private authService: AuthService;
+  private searchResultsView: SearchResultsView | null = null;
+  private router: Router;
+  private eventBus: EventBus;
+  private systemLogger: SystemLogger;
+
+  private currentQuery: string = '';
+  private currentResults: NostrEvent[] = [];
+  private isSearching: boolean = false;
+  private oldestTimestamp: number | null = null;
+  private hasMore: boolean = true;
+  private isProfileSearch: boolean = false; // Track if this is profile search (no pagination)
+
+  constructor() {
+    this.searchOrchestrator = SearchOrchestrator.getInstance();
+    this.muteOrchestrator = MuteOrchestrator.getInstance();
+    this.authService = AuthService.getInstance();
+    this.router = Router.getInstance();
+    this.eventBus = EventBus.getInstance();
+    this.systemLogger = SystemLogger.getInstance();
+    this.container = this.createElement();
+    this.setupEventListeners();
+  }
+
+  /**
+   * Create container element
+   */
+  private createElement(): HTMLElement {
+    const container = document.createElement('div');
+    container.className = 'global-search-view';
+    container.style.display = 'none'; // Hidden by default
+    return container;
+  }
+
+  /**
+   * Setup event listeners
+   */
+  private setupEventListeners(): void {
+    // Listen for global search start (NIP-50 relay search)
+    this.eventBus.on('globalSearch:start', (data: { query: string }) => {
+      this.performGlobalSearch(data.query);
+    });
+
+    // Listen for profile search complete (client-side filtered results)
+    this.eventBus.on('profileSearch:complete', (data: { query: string; results: NostrEvent[]; meta: string }) => {
+      this.displayProfileSearchResults(data.query, data.results, data.meta);
+    });
+
+    // Listen for mute list updates - re-filter current results
+    this.eventBus.on('mute:updated', async () => {
+      if (this.currentResults.length > 0) {
+        // Re-filter current results
+        const filtered = await this.filterMutedUsers(this.currentResults);
+        this.currentResults = filtered;
+        this.renderResults();
+      }
+    });
+  }
+
+  /**
+   * Perform global search (NIP-50 relay, no auto-load)
+   */
+  private async performGlobalSearch(query: string): Promise<void> {
+    if (this.isSearching) return;
+
+    this.currentQuery = query;
+    this.isSearching = true;
+    this.currentResults = [];
+    this.oldestTimestamp = null;
+    this.hasMore = true;
+    this.isProfileSearch = false;
+
+    this.showLoading();
+
+    try {
+      const results = await this.searchOrchestrator.search({
+        query,
+        limit: 20
+      });
+
+      // Filter out muted users
+      const filteredResults = await this.filterMutedUsers(results);
+
+      this.currentResults = filteredResults;
+      this.hasMore = results.length === 20;
+
+      if (filteredResults.length > 0) {
+        this.oldestTimestamp = Math.min(...filteredResults.map(e => e.created_at));
+      }
+
+      this.renderResults();
+
+    } catch (error) {
+      this.systemLogger.error('GlobalSearchView', 'Search failed:', error);
+      this.showError('Search failed. Please try again.');
+    } finally {
+      this.isSearching = false;
+    }
+  }
+
+  /**
+   * Display profile search results (already filtered client-side)
+   */
+  private displayProfileSearchResults(query: string, results: NostrEvent[], meta: string): void {
+    this.currentQuery = query;
+    this.currentResults = results;
+    this.isProfileSearch = true;
+    this.hasMore = false; // No pagination for profile search (all results already loaded)
+
+    // Destroy previous SearchResultsView if exists
+    if (this.searchResultsView) {
+      this.searchResultsView.destroy();
+      this.searchResultsView = null;
+    }
+
+    // Clear container
+    this.container.innerHTML = '';
+    this.container.style.display = 'block';
+
+    // Activate search tab
+    this.activateSearchTab();
+
+    // Create SearchResultsView
+    this.searchResultsView = new SearchResultsView(
+      {
+        title: `Profile Search: "${query}"`,
+        searchTerms: query,
+        meta
+      },
+      {
+        onNoteClick: (noteId) => this.handleNoteClick(noteId),
+        onLoadMore: () => {} // No pagination for profile search
+      }
+    );
+
+    // Render results
+    this.searchResultsView.render(results);
+
+    // Append to container
+    this.container.appendChild(this.searchResultsView.getElement());
+  }
+
+  /**
+   * Load more results (for InfiniteScroll - only for global search)
+   */
+  private async loadMoreResults(): Promise<void> {
+    // Don't paginate profile search results (already loaded all)
+    if (this.isProfileSearch || this.isSearching || !this.hasMore || !this.oldestTimestamp) return;
+
+    this.isSearching = true;
+    this.searchResultsView?.showLoading();
+
+    try {
+      const moreResults = await this.searchOrchestrator.searchPaginated(
+        {
+          query: this.currentQuery,
+          limit: 20
+        },
+        this.oldestTimestamp
+      );
+
+      // Filter out muted users
+      const filteredResults = await this.filterMutedUsers(moreResults);
+
+      if (filteredResults.length > 0) {
+        this.currentResults = [...this.currentResults, ...filteredResults];
+        this.oldestTimestamp = Math.min(...moreResults.map(e => e.created_at));
+        this.hasMore = moreResults.length === 20;
+        this.searchResultsView?.appendResults(filteredResults);
+      } else {
+        this.hasMore = false;
+      }
+
+    } catch (error) {
+      this.systemLogger.error('GlobalSearchView', 'Load more failed:', error);
+    } finally {
+      this.searchResultsView?.hideLoading();
+      this.isSearching = false;
+    }
+  }
+
+  /**
+   * Show loading state
+   */
+  private showLoading(): void {
+    this.container.style.display = 'block';
+
+    // Switch to search results tab
+    this.activateSearchTab();
+
+    this.container.innerHTML = `
+      <div class="infinite-scroll-loading" style="display: flex;">
+        <p>Searching...</p>
+      </div>
+    `;
+  }
+
+  /**
+   * Show error state
+   */
+  private showError(message: string): void {
+    this.container.style.display = 'block';
+    this.container.innerHTML = `
+      <div class="global-search-error">
+        <p>${message}</p>
+      </div>
+    `;
+  }
+
+  /**
+   * Render search results
+   */
+  private renderResults(): void {
+    // Destroy previous SearchResultsView if exists
+    if (this.searchResultsView) {
+      this.searchResultsView.destroy();
+      this.searchResultsView = null;
+    }
+
+    // Clear container
+    this.container.innerHTML = '';
+    this.container.style.display = 'block';
+
+    // Create SearchResultsView
+    this.searchResultsView = new SearchResultsView(
+      {
+        title: `Search Results: "${this.currentQuery}"`,
+        searchTerms: this.currentQuery,
+        meta: `${this.currentResults.length} result${this.currentResults.length !== 1 ? 's' : ''} found`
+      },
+      {
+        onNoteClick: (noteId) => this.handleNoteClick(noteId),
+        onLoadMore: () => this.loadMoreResults()
+      }
+    );
+
+    // Render results
+    this.searchResultsView.render(this.currentResults);
+
+    // Append to container
+    this.container.appendChild(this.searchResultsView.getElement());
+  }
+
+  /**
+   * Handle note click (navigate to SNV)
+   */
+  private handleNoteClick(noteId: string): void {
+    // Navigate to SNV
+    const nevent = encodeNevent(noteId);
+    this.router.navigate(`/note/${nevent}`);
+  }
+
+  /**
+   * Get DOM element
+   */
+  public getElement(): HTMLElement {
+    return this.container;
+  }
+
+  /**
+   * Activate search tab (make visible and switch tabs)
+   */
+  private activateSearchTab(): void {
+    this.ensureSearchTabButton();
+
+    // Hide all other tab contents
+    document.querySelectorAll('.secondary-tab-content').forEach(content => {
+      content.classList.remove('secondary-tab-content--active');
+    });
+
+    // Deactivate all tab buttons
+    document.querySelectorAll('.secondary-tab').forEach(tab => {
+      tab.classList.remove('secondary-tab--active');
+    });
+
+    // Activate search tab button
+    const searchTabBtn = document.querySelector('.secondary-tab[data-tab="search-results"]');
+    if (searchTabBtn) {
+      searchTabBtn.classList.add('secondary-tab--active');
+    }
+
+    // Show search results container
+    this.container.classList.add('secondary-tab-content', 'secondary-tab-content--active');
+    this.container.setAttribute('data-tab-content', 'search-results');
+  }
+
+  /**
+   * Ensure search tab button exists in tabs container
+   */
+  private ensureSearchTabButton(): void {
+    const tabsContainer = document.querySelector('.secondary-tabs');
+    if (!tabsContainer) return;
+
+    // Check if tab already exists
+    const existingTab = tabsContainer.querySelector('.secondary-tab[data-tab="search-results"]');
+    if (existingTab) return;
+
+    // Create new tab button
+    const searchTab = document.createElement('button');
+    searchTab.className = 'secondary-tab';
+    searchTab.setAttribute('data-tab', 'search-results');
+    searchTab.textContent = 'Search Results';
+
+    // Add click handler
+    searchTab.addEventListener('click', () => {
+      this.activateSearchTab();
+    });
+
+    // Append to tabs container
+    tabsContainer.appendChild(searchTab);
+  }
+
+  /**
+   * Filter out events from muted users
+   * Filters both direct posts and reposts where original author is muted
+   * @param events Array of events to filter
+   * @returns Filtered array
+   */
+  private async filterMutedUsers(events: NostrEvent[]): Promise<NostrEvent[]> {
+    const currentUser = this.authService.getCurrentUser();
+    if (!currentUser) {
+      return events; // No user logged in, no filtering
+    }
+
+    try {
+      // Get all muted pubkeys
+      const mutedPubkeys = await this.muteOrchestrator.getAllMutedUsers(currentUser.pubkey);
+      const mutedSet = new Set(mutedPubkeys);
+
+      if (mutedSet.size === 0) {
+        return events; // No muted users
+      }
+
+      return events.filter(event => {
+        // Filter direct posts from muted users
+        if (mutedSet.has(event.pubkey)) {
+          return false;
+        }
+
+        // Filter reposts (Kind 6) where the original author is muted
+        if (event.kind === 6) {
+          const repostedAuthorTag = event.tags.find(tag => tag[0] === 'p');
+          if (repostedAuthorTag && repostedAuthorTag[1]) {
+            const repostedAuthorPubkey = repostedAuthorTag[1];
+            if (mutedSet.has(repostedAuthorPubkey)) {
+              return false;
+            }
+          }
+        }
+
+        return true;
+      });
+    } catch (error) {
+      this.systemLogger.error('GlobalSearchView', 'Failed to filter muted users:', error);
+      return events; // Return unfiltered on error
+    }
+  }
+
+  /**
+   * Hide search view
+   */
+  public hide(): void {
+    this.container.style.display = 'none';
+  }
+
+  /**
+   * Cleanup
+   */
+  public destroy(): void {
+    this.searchResultsView?.destroy();
+    this.container.remove();
+  }
+}

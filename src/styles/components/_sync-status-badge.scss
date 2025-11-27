@@ -1,0 +1,55 @@
+/**
+ * Sync Status Badge
+ * Visual indicator for follow list sync state
+ */
+
+@use '../abstracts/variables' as *;
+
+.sync-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: calc($gap / 2);
+  padding: calc($gap / 2) $gap;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  font-weight: 500;
+
+  &__icon {
+    flex-shrink: 0;
+
+    &--spinning {
+      animation: spin 1s linear infinite;
+    }
+  }
+
+  &__text {
+    line-height: 1;
+  }
+
+  // Syncing state (blue/info)
+  &--syncing {
+    background-color: rgba($color-4, 0.1);
+    color: $color-4;
+  }
+
+  // Synced state (green/success)
+  &--synced {
+    background-color: rgba(#10b981, 0.1);
+    color: #10b981;
+  }
+
+  // Error state (red/error)
+  &--error {
+    background-color: rgba(#ef4444, 0.1);
+    color: #ef4444;
+  }
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}

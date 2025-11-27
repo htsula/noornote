@@ -1,0 +1,183 @@
+/**
+ * Notifications View & NotificationItem Component Styles
+ * Based on ISL color scheme
+ */
+
+@use '../abstracts/variables' as *;
+@use 'sass:color';
+
+// Notifications View Container
+.notifications-view {
+  width: 100%;
+  max-width: 700px;
+  margin: 0 auto;
+  padding: $gap;
+}
+
+.notifications-view__header {
+  margin-bottom: $gap;
+
+  h1 {
+    font-size: 24px;
+    font-weight: 700;
+    margin: 0;
+  }
+}
+
+.notifications-view__tabs {
+  display: flex;
+  gap: $gap;
+  border-bottom: 1px solid $color-2;
+  margin-bottom: $gap;
+}
+
+.notifications-view__tab {
+  padding: calc($gap / 2) $gap;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: rgba($color-5, 0.6);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    color: $color-5;
+  }
+
+  &--active {
+    color: $color-4;
+    border-bottom-color: $color-4;
+  }
+}
+
+.notifications-view__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.notifications-view__empty {
+  text-align: center;
+  padding: $gap * 4;
+  color: rgba($color-5, 0.5);
+  font-size: 16px;
+}
+
+.notifications-view__loading {
+  text-align: center;
+  padding: $gap * 2;
+  color: rgba($color-5, 0.6);
+  font-size: 14px;
+  font-style: italic;
+}
+
+// NotificationItem Component
+.notification-item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: $gap;
+  padding: $gap;
+  border-bottom: 1px solid $color-2;
+  cursor: pointer;
+  transition: background 0.2s ease;
+
+  &:hover {
+    background: rgba($color-2, 0.5);
+  }
+
+  &:active {
+    transform: scale(0.99);
+  }
+}
+
+.notification-item__icon {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  font-size: 18px;
+  padding-top: 2px;
+
+  svg {
+    width: 18px;
+    height: 18px;
+    stroke: currentColor;
+  }
+}
+
+.notification-item__content {
+  display: flex;
+  flex-direction: column;
+  gap: calc($gap / 2);
+  min-width: 0; // Allow text truncation
+}
+
+.notification-item__header {
+  display: flex;
+  gap: calc($gap / 2);
+  align-items: center;
+}
+
+.notification-item__user-identity {
+  display: flex;
+  align-items: center;
+  gap: calc($gap / 2);
+  flex-shrink: 0;
+}
+
+.notification-item__info {
+  display: flex;
+  align-items: baseline;
+  gap: calc($gap / 4);
+  flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.notification-item__action {
+  font-size: 14px;
+  color: rgba($color-5, 0.6);
+}
+
+.notification-item__timestamp {
+  font-size: 12px;
+  color: rgba($color-5, 0.5);
+  white-space: nowrap;
+}
+
+.notification-item__preview {
+  font-size: 14px;
+  color: rgba($color-5, 0.8);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+// Type-specific icon colors (matching ISL)
+.notification-item[data-type="reply"] .notification-item__icon {
+  color: #3b82f6; // Blue
+}
+
+.notification-item[data-type="mention"] .notification-item__icon {
+  color: #3b82f6; // Blue (same as reply)
+}
+
+.notification-item[data-type="zap"] .notification-item__icon {
+  color: #f59e0b; // Orange
+}
+
+.notification-item[data-type="repost"] .notification-item__icon {
+  color: #10b981; // Green
+}
+
+.notification-item[data-type="reaction"] .notification-item__icon {
+  color: #ef4444; // Red
+  font-size: 20px; // Emoji reactions slightly bigger
+}

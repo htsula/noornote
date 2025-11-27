@@ -1,0 +1,147 @@
+/**
+ * URL Navigation Modal
+ * Spotlight-style modal for URL navigation
+ */
+
+@use '../abstracts/variables' as *;
+
+.url-navigation-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.url-navigation-overlay {
+  display: none;
+}
+
+.url-navigation-content {
+  position: relative;
+  width: 90%;
+  max-width: 600px;
+  background: $color-1;
+  border: 1px solid $color-2;
+  border-radius: $radius-md;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  pointer-events: auto;
+}
+
+.url-navigation-input-wrapper {
+  padding: $gap;
+  border-bottom: 1px solid $color-2;
+}
+
+.url-navigation-input {
+  width: 100%;
+  padding: calc($gap / 2);
+  background: $color-2;
+  border: 1px solid $color-2;
+  border-radius: $radius-sm;
+  color: $color-5;
+  font-size: 18px;
+  font-family: monospace;
+
+  &::placeholder {
+    color: rgba($color-5, 0.4);
+  }
+
+  &:focus {
+    outline: none;
+    border-color: $color-4;
+  }
+}
+
+.url-navigation-controls {
+  display: flex;
+  gap: calc($gap / 2);
+  padding: calc($gap / 2) $gap;
+  background: $color-2;
+  border-bottom: 1px solid rgba($color-5, 0.1);
+}
+
+.url-nav-btn {
+  display: flex;
+  align-items: center;
+  gap: calc($gap / 4);
+  padding: calc($gap / 4) calc($gap / 2);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: $radius-sm;
+  color: $color-5;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  &:hover:not(:disabled) {
+    background: $color-1;
+    border-color: $color-4;
+  }
+
+  &.selected:not(:disabled) {
+    background: $color-1;
+    border-color: $color-4;
+  }
+
+  &:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+}
+
+.url-navigation-suggestions {
+  max-height: 400px;
+  overflow-y: auto;
+  padding: calc($gap / 2);
+}
+
+.url-suggestion {
+  display: flex;
+  align-items: center;
+  gap: calc($gap / 2);
+  padding: calc($gap / 2);
+  border-radius: $radius-sm;
+  cursor: pointer;
+  transition: background 0.2s ease;
+
+  &:hover {
+    background: $color-2;
+  }
+
+  &.selected {
+    background: $color-2;
+    border: 1px solid $color-4;
+  }
+}
+
+.url-suggestion-icon {
+  width: 16px;
+  height: 16px;
+  color: rgba($color-5, 0.5);
+  flex-shrink: 0;
+}
+
+.url-suggestion-text {
+  color: $color-5;
+  font-size: 14px;
+  font-family: monospace;
+}
+
+.url-suggestion-empty {
+  padding: $gap;
+  text-align: center;
+  color: rgba($color-5, 0.4);
+  font-size: 14px;
+}

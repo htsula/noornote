@@ -1,0 +1,163 @@
+/**
+ * Follow List Shared Styles
+ * Badges and controls used in Follow List view
+ */
+
+@use '../abstracts/variables' as *;
+@use 'sass:color';
+@use '../atoms/progress-bar' as pb;
+
+// Mutual status badge (used in Follow List)
+.mutual-badge {
+  display: inline-block;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 600;
+  white-space: nowrap;
+
+  &--yes {
+    background: rgba(16, 185, 129, 0.15);
+    color: #10b981;
+  }
+
+  &--no {
+    background: rgba(156, 163, 175, 0.15);
+    color: #9ca3af;
+  }
+}
+
+// Zap stats badge (orange theme)
+.zap-stats-badge {
+  display: inline-block;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 600;
+  white-space: nowrap;
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+
+  // Loading state with pulsing animation
+  &--loading {
+    animation: pulsate 2.5s ease-in-out infinite;
+  }
+}
+
+// Follow item badges container
+.follow-item__badges {
+  display: flex;
+  align-items: center;
+  gap: calc($gap / 2);
+  flex-wrap: wrap;
+}
+
+// Article notification label in follow list
+.article-notif-label {
+  font-size: 10px;
+  color: $color-3;
+  margin-left: calc($gap / 4);
+}
+
+// Sort controls
+.follows-sort-controls {
+  @include pb.progress-bar-container();
+
+  display: flex;
+  align-items: center;
+  gap: $gap;
+  padding: calc($gap / 2) 0;
+  font-size: 12px;
+
+  a {
+    color: $color-4;
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
+    }
+
+    &.active {
+      font-weight: 700;
+    }
+  }
+
+  &__link--disabled {
+    opacity: 0.4;
+    pointer-events: none;
+    color: $color-3;
+  }
+
+  &__load-all {
+    &--loading {
+      animation: pulsate 2.5s ease-in-out infinite;
+      pointer-events: none;
+    }
+
+    &--done {
+      color: $color-3;
+      pointer-events: none;
+    }
+  }
+
+  &__sort {
+    color: $color-3;
+
+    &--disabled {
+      opacity: 0.4;
+      pointer-events: none;
+
+      a {
+        color: $color-3;
+        cursor: not-allowed;
+      }
+    }
+  }
+
+  &__search {
+    padding: 2px 6px;
+    font-size: 12px;
+    border: 1px solid $color-2;
+    border-radius: 3px;
+    background: transparent;
+    color: $color-5;
+    width: 120px;
+
+    &::placeholder {
+      color: $color-3;
+    }
+
+    &:focus {
+      outline: none;
+      border-color: $color-4;
+    }
+
+    &--disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+  }
+
+  &__non-mutuals {
+    display: flex;
+    align-items: center;
+    gap: calc($gap / 4);
+    color: $color-3;
+    cursor: pointer;
+    white-space: nowrap;
+
+    input {
+      cursor: pointer;
+      accent-color: $color-4;
+    }
+
+    &:hover {
+      color: $color-4;
+    }
+
+    &--disabled {
+      opacity: 0.4;
+      pointer-events: none;
+    }
+  }
+}

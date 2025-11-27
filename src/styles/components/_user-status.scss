@@ -1,0 +1,52 @@
+/**
+ * User Status Component Styles
+ * Shows current user info with logout button in secondary content
+ */
+
+@use 'sass:color';
+@use '../abstracts/variables' as *;
+
+.user-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  .user-info {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+
+    .user-indicator {
+      font-size: 12px;
+      margin-right: 5px;
+      color: $color-6; // Soft mint green status indicator
+    }
+
+    .user-display {
+      color: $color-5;
+      font-size: 14px;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 150px;
+    }
+  }
+
+  // Button styles moved to molecules/_buttons.scss
+}
+
+// Mobile responsive
+@media (max-width: 768px) {
+  .user-status {
+    flex-direction: column;
+    gap: var(--space-xs);
+    align-items: flex-end;
+
+    .user-info .user-display {
+      max-width: 120px;
+    }
+
+    // Button styles moved to molecules/_buttons.scss
+  }
+}

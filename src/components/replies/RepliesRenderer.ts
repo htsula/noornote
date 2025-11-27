@@ -1,0 +1,346 @@
+/**
+ * RepliesRenderer Component
+ * Handles fetching and rendering replies for notes and articles
+ * Shared component used by SingleNoteView and ArticleView
+ */
+
+import { NoteUI } from '../ui/NoteUI';
+import { ZapsList } from '../ui/ZapsList';
+import { LikesList } from '../ui/LikesList';
+import { ThreadOrchestrator } from '../../services/orchestration/ThreadOrchestrator';
+import { ReactionsOrchestrator } from '../../services/orchestration/ReactionsOrchestrator';
+import { UserProfileService } from '../../services/UserProfileService';
+import { fetchNostrEvents } from '../../helpers/fetchNostrEvents';
+import { RelayConfig } from '../../services/RelayConfig';
+import { SystemLogger } from '../system/SystemLogger';
+import { encodeNevent } from '../../services/NostrToolsAdapter';
+import { escapeHtml } from '../../helpers/escapeHtml';
+import type { Event as NostrEvent } from '@nostr-dev-kit/ndk';
+
+/** Thread node for building reply tree */
+interface ThreadNode {
+  event: NostrEvent;
+  children: ThreadNode[];
+  depth: number;
+}
+
+export interface RepliesRendererOptions {
+  /** Container element to render replies into */
+  container: HTMLElement;
+  /** Note ID or addressable identifier (for addressable events) */
+  noteId: string;
+  /** Author pubkey of the note/article */
+  noteAuthor: string;
+  /** Whether to update ISL stats after fetching replies */
+  updateISL?: boolean;
+  /** Callback to load zaps list for a reply */
+  onLoadZapsList?: (noteId: string, authorPubkey: string, noteElement: HTMLElement) => void;
+}
+
+export class RepliesRenderer {
+  private container: HTMLElement;
+  private noteId: string;
+  private noteAuthor: string;
+  private updateISL: boolean;
+  private onLoadZapsList?: (noteId: string, authorPubkey: string, noteElement: HTMLElement) => void;
+
+  private threadOrchestrator: ThreadOrchestrator;
+  private reactionsOrchestrator: ReactionsOrchestrator;
+  private relayConfig: RelayConfig;
+  private systemLogger: SystemLogger;
+
+  constructor(options: RepliesRendererOptions) {
+    this.container = options.container;
+    this.noteId = options.noteId;
+    this.noteAuthor = options.noteAuthor;
+    this.updateISL = options.updateISL !== false; // Default true
+    this.onLoadZapsList = options.onLoadZapsList;
+
+    this.threadOrchestrator = ThreadOrchestrator.getInstance();
+    this.reactionsOrchestrator = ReactionsOrchestrator.getInstance();
+    this.relayConfig = RelayConfig.getInstance();
+    this.systemLogger = SystemLogger.getInstance();
+  }
+
+  /**
+   * Load and render replies for a note/article
+   */
+  public async loadAndRender(): Promise<void> {
+    // Show loading state
+    this.container.innerHTML = `
+      <div class="snv-replies__loading">
+        <div class="loading-spinner"></div>
+        <p>Loading replies...</p>
+      </div>
+    `;
+
+    try {
+      // Fetch both replies and quoted reposts in parallel
+      const [allReplies, allQuotedReposts] = await Promise.all([
+        this.threadOrchestrator.fetchReplies(this.noteId),
+        this.fetchQuotedReposts(this.noteId)
+      ]);
+
+      // Filter out quoted reposts from the same author (own replies with quotes)
+      const quotedReposts = allQuotedReposts.filter(q => q.pubkey !== this.noteAuthor);
+
+      // Filter out any replies that are also quoted reposts (to avoid duplicates)
+      const quotedRepostIds = new Set(quotedReposts.map(q => q.id));
+      const replies = allReplies.filter(r => !quotedRepostIds.has(r.id));
+      // Note: Muted users already filtered in ThreadOrchestrator.fetchReplies()
+
+      if (replies.length === 0 && quotedReposts.length === 0) {
+        this.container.innerHTML = `
+          <div class="snv-replies__empty">
+            <p>No replies or quotes yet</p>
+          </div>
+        `;
+        return;
+      }
+
+      // Build thread tree from replies
+      const threadTree = this.buildThreadTree(replies, this.noteId);
+
+      // Count total comments (replies + quoted reposts, not nested)
+      const totalComments = replies.length + quotedReposts.length;
+
+      // Update ISL reply count in main note (if requested)
+      if (this.updateISL) {
+        const isl = NoteUI.getInteractionStatusLine(this.noteId);
+        if (isl) {
+          await isl.waitForInitialFetch();
+          isl.updateStats({
+            replies: replies.length,
+            quotedReposts: quotedReposts.length
+          });
+
+          // Also update the cache so Timeline shows correct count
+          this.reactionsOrchestrator.updateCachedStats(this.noteId, {
+            replies: replies.length,
+            quotedReposts: quotedReposts.length
+          });
+        }
+      }
+
+      // Render header with total comment count
+      this.container.innerHTML = `
+        <div class="snv-replies__header">
+          <h3>Replies & Quotes (${totalComments})</h3>
+        </div>
+        <div class="snv-replies__list"></div>
+      `;
+
+      const repliesList = this.container.querySelector('.snv-replies__list');
+      if (repliesList) {
+        // Mix TOP-LEVEL replies and quoted reposts, sorted by timestamp
+        const comments = [
+          ...threadTree.map(node => ({
+            type: 'reply' as const,
+            node: node,
+            timestamp: node.event.created_at
+          })),
+          ...quotedReposts.map(event => ({
+            type: 'quote' as const,
+            event: event,
+            timestamp: event.created_at
+          }))
+        ].sort((a, b) => a.timestamp - b.timestamp); // Oldest first (chronological)
+
+        // Render all comments
+        for (const comment of comments) {
+          if (comment.type === 'reply') {
+            this.renderThreadedReply(comment.node, repliesList);
+          } else {
+            await this.renderQuotedRepost(comment.event, repliesList);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load replies:', error);
+      this.container.innerHTML = `
+        <div class="snv-replies__error">
+          <p>Failed to load replies. Please try again.</p>
+        </div>
+      `;
+    }
+  }
+
+  /**
+   * Build thread tree from flat reply list
+   */
+  private buildThreadTree(replies: NostrEvent[], rootNoteId: string): ThreadNode[] {
+    const nodes = new Map<string, ThreadNode>();
+    const rootNodes: ThreadNode[] = [];
+
+    // Create nodes for all replies
+    replies.forEach(reply => {
+      nodes.set(reply.id, {
+        event: reply,
+        children: [],
+        depth: 0
+      });
+    });
+
+    // Build parent-child relationships
+    replies.forEach(reply => {
+      const node = nodes.get(reply.id)!;
+      const parentId = this.extractReplyParentId(reply);
+
+      if (!parentId || parentId === rootNoteId) {
+        // Top-level reply (directly replying to the main note)
+        rootNodes.push(node);
+      } else {
+        // Child reply (replying to another reply)
+        const parentNode = nodes.get(parentId);
+        if (parentNode) {
+          node.depth = parentNode.depth + 1;
+          parentNode.children.push(node);
+        } else {
+          // Parent not found in replies, treat as root-level
+          rootNodes.push(node);
+        }
+      }
+    });
+
+    return rootNodes;
+  }
+
+  /**
+   * Fetch quoted reposts (kind 1 or kind 6 with 'q' tag referencing this note)
+   */
+  private async fetchQuotedReposts(noteId: string): Promise<NostrEvent[]> {
+    const relays = this.relayConfig.getReadRelays();
+
+    this.systemLogger.info('RepliesRenderer', `🔍 Fetching quoted reposts for ${noteId.slice(0, 8)}...`);
+
+    try {
+      const result = await fetchNostrEvents({
+        relays,
+        kinds: [1, 6], // Text notes and reposts
+        tags: { 'q': [noteId] }, // Quoted reference
+        limit: 100
+      });
+
+      // Filter to only quoted reposts (those with 'q' tag and content)
+      const quotedReposts = result.events.filter(event => {
+        const qTags = event.tags.filter(tag => tag[0] === 'q');
+        const hasQTag = qTags.some(tag => tag[1] === noteId);
+        const hasContent = event.content.trim().length > 0;
+
+        return hasQTag && hasContent;
+      });
+
+      this.systemLogger.info('RepliesRenderer', `✅ Quoted reposts: ${quotedReposts.length}`);
+      return quotedReposts;
+    } catch (error) {
+      this.systemLogger.error('RepliesRenderer', `Failed to fetch quoted reposts: ${error}`);
+      return [];
+    }
+  }
+
+  /**
+   * Extract parent ID from reply's e-tags (NIP-10)
+   */
+  private extractReplyParentId(reply: NostrEvent): string | null {
+    const eTags = reply.tags.filter(tag => tag[0] === 'e');
+    if (eTags.length === 0) return null;
+
+    // NIP-10: Look for explicit "reply" marker
+    const replyTag = eTags.find(tag => tag[3] === 'reply');
+    if (replyTag) return replyTag[1];
+
+    // NIP-10 deprecated: last e-tag is the replied-to note
+    return eTags[eTags.length - 1][1];
+  }
+
+  /**
+   * Render a threaded reply recursively with indentation
+   */
+  private renderThreadedReply(node: ThreadNode, container: Element): void {
+    const replyElement = this.createReplyElement(node.event, node.depth);
+    container.appendChild(replyElement);
+
+    // Recursively render children
+    node.children.forEach(childNode => {
+      this.renderThreadedReply(childNode, container);
+    });
+  }
+
+  /**
+   * Create a reply element with depth-based indentation
+   */
+  private createReplyElement(reply: NostrEvent, depth: number = 0): HTMLElement {
+    const isUserLoggedIn = this.authService.getCurrentUser() !== null;
+
+    const noteElement = NoteUI.createNoteElement(reply, {
+      collapsible: true,
+      islFetchStats: true,
+      isLoggedIn: isUserLoggedIn,
+      headerSize: 'small',
+      depth: 0
+    });
+
+    // Load zaps list for this reply (if callback provided)
+    if (this.onLoadZapsList) {
+      this.onLoadZapsList(reply.id, reply.pubkey, noteElement);
+    }
+
+    // Wrap in reply container with depth-based indentation
+    const replyWrapper = document.createElement('div');
+    replyWrapper.className = 'snv-reply';
+    replyWrapper.dataset.eventId = reply.id;
+    replyWrapper.dataset.depth = String(depth);
+    replyWrapper.appendChild(noteElement);
+
+    return replyWrapper;
+  }
+
+  /**
+   * Render a quoted repost as a special comment
+   */
+  private async renderQuotedRepost(quoteEvent: NostrEvent, container: Element): Promise<void> {
+    this.systemLogger.info('RepliesRenderer', `🎨 Rendering quoted repost: ${quoteEvent.id.slice(0, 8)}`);
+
+    // Remove nostr:nevent/note links from content
+    const cleanedEvent = {
+      ...quoteEvent,
+      content: quoteEvent.content.replace(/nostr:(nevent|note|nprofile|npub)[a-z0-9]+/gi, '').trim()
+    };
+
+    // Create wrapper for quote
+    const quoteWrapper = document.createElement('div');
+    quoteWrapper.className = 'snv-quoted-repost';
+    quoteWrapper.dataset.eventId = quoteEvent.id;
+
+    // Fetch author's profile for header
+    const profileService = UserProfileService.getInstance();
+    const profile = await profileService.getUserProfile(quoteEvent.pubkey);
+    const username = profile?.display_name || profile?.name || 'Anonymous';
+
+    // Convert hex ID to nevent for navigation link
+    const nevent = encodeNevent(quoteEvent.id, [], quoteEvent.pubkey);
+
+    // Create "quoted this note:" header with clickable username
+    const quoteHeader = document.createElement('div');
+    quoteHeader.className = 'snv-quoted-repost__header';
+    quoteHeader.innerHTML = `<a href="/note/${nevent}" class="snv-quoted-repost__link"><strong>${escapeHtml(username)}</strong></a> quoted this note:`;
+
+    // Use NoteUI to render the quote (disable auto-setup)
+    const noteElement = NoteUI.createNoteElement(cleanedEvent, {
+      collapsible: false,  // Disable auto-setup - will setup manually after DOM insertion
+      islFetchStats: false,
+      isLoggedIn: false,
+      headerSize: 'small',
+      depth: 0
+    });
+
+    // Assemble: header + note
+    quoteWrapper.appendChild(quoteHeader);
+    quoteWrapper.appendChild(noteElement);
+    container.appendChild(quoteWrapper);
+
+    // Setup CollapsibleManager AFTER element is in DOM
+    const { CollapsibleManager } = await import('../ui/note-features/CollapsibleManager');
+    CollapsibleManager.setup(noteElement);
+  }
+}

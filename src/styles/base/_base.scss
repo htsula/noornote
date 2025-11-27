@@ -1,0 +1,124 @@
+/**
+ * Base - Root styles and CSS custom properties
+ * Theme setup and global styles
+ */
+
+@use '../abstracts/variables' as *;
+@use '../abstracts/mixins' as *;
+
+// CSS Custom Properties (CSS Variables)
+:root {
+  // Apply light theme by default
+  @include theme-colors($light-theme);
+
+  // Apply dark theme based on preference
+  @include dark-mode {
+    @include theme-colors($dark-theme);
+  }
+}
+
+// Manual theme classes (for theme toggle)
+.theme-light {
+  @include theme-colors($light-theme);
+}
+
+.theme-dark {
+  @include theme-colors($dark-theme);
+}
+
+// Root element setup
+html {
+  // Prevent horizontal scrolling
+  overflow-x: hidden;
+
+  // Better text rendering
+  text-rendering: optimizeLegibility;
+  -webkit-text-size-adjust: 100%;
+
+  // Global scrollbar (works in Tauri)
+  @include custom-scrollbar;
+}
+
+// Body element
+body {
+  // Prevent horizontal scrolling
+  overflow-x: hidden;
+
+  // Background patterns or textures could go here
+  background-color: var(--color-background);
+
+  // Improve text rendering
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  // Global scrollbar (works in Tauri)
+  @include custom-scrollbar;
+}
+
+// Main application container
+#app {
+  min-height: 100vh;
+  width: 100%;
+}
+
+// Focus management
+.js-focus-visible :focus:not(.focus-visible) {
+  outline: none;
+}
+
+// Reduced motion preferences
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+// High contrast mode support
+@media (prefers-contrast: high) {
+  :root {
+    --color-border: currentColor;
+    --color-border-light: currentColor;
+  }
+}
+
+// Print styles
+@media print {
+  *,
+  *::before,
+  *::after {
+    background: transparent !important;
+    color: black !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  a,
+  a:visited {
+    text-decoration: underline;
+  }
+
+  img {
+    page-break-inside: avoid;
+  }
+
+  p,
+  h2,
+  h3 {
+    orphans: 3;
+    widows: 3;
+  }
+
+  h2,
+  h3 {
+    page-break-after: avoid;
+  }
+}

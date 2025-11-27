@@ -1,0 +1,60 @@
+/**
+ * NoteProcessor - Main processor for all note types
+ * Routes events to specialized processors based on kind
+ * Extracts from: NoteUI.processNote()
+ */
+
+import type { Event as NostrEvent } from '@nostr-dev-kit/ndk';
+import type { ProcessedNote } from '../types/NoteTypes';
+import { TextNoteProcessor } from './TextNoteProcessor';
+import { RepostProcessor } from './RepostProcessor';
+import { PollProcessor } from './PollProcessor';
+import { ArticleProcessor } from './ArticleProcessor';
+
+export class NoteProcessor {
+  /**
+   * Process any Nostr event into a ProcessedNote
+   * SYNCHRONOUS - routes to specialized processor
+   */
+  static process(event: NostrEvent): ProcessedNote {
+    try {
+      switch (event.kind) {
+        case 1:
+          return TextNoteProcessor.process(event);
+        case 6:
+          return RepostProcessor.process(event);
+        case 1068:
+          return PollProcessor.process(event);
+        case 30023:
+          return ArticleProcessor.process(event);
+        default:
+          console.warn(`⚠️ Unsupported note kind: ${event.kind}`);
+          return TextNoteProcessor.process(event);
+      }
+    } catch (error) {
+      console.error(`❌ ERROR processing note ${event.id.slice(0, 8)}:`, error);
+      return NoteProcessor.createFallbackNote(event);
+    }
+  }
+
+  /**
+   * Create fallback note when processing fails
+   */
+  private static createFallbackNote(event: NostrEvent): ProcessedNote {
+    return {
+      id: event.id,
+      type: 'original',
+      timestamp: event.created_at,
+      author: { pubkey: event.pubkey },
+      content: {
+        text: event.content,
+        html: event.content.replace(/\n/g, '<br>'),
+        media: [],
+        links: [],
+        hashtags: [],
+        quotedReferences: []
+      },
+      rawEvent: event
+    };
+  }
+}

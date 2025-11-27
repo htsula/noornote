@@ -1,0 +1,22 @@
+/**
+ * Infinite Scroll Component
+ * Loading indicator with pulsing animation
+ */
+
+@use '../abstracts/variables' as *;
+
+.infinite-scroll-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc($gap / 2);
+  padding: $gap * 2;
+
+  p {
+    font-style: italic;
+    color: var(--color-text-secondary);
+    margin: 0;
+    animation: pulsate 2.5s ease-in-out infinite;
+  }
+}

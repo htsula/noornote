@@ -1,0 +1,308 @@
+/**
+ * NoteUI Component Styles
+ * Central styles for all note rendering (Timeline, Profile, SNV)
+ * Single Source of Truth for note-card display
+ */
+
+@use '../abstracts/variables' as *;
+@use '../abstracts/mixins' as *;
+
+// Base note card (used in all views)
+.note-card {
+  margin: calc($gap / 2) 0;
+  padding: calc($gap / 2);
+  border-bottom: 1px solid $color-2;
+  border-radius: 0.5rem;
+  transition: background 0.2s ease;
+
+  &:hover {
+    background: $color-2;
+  }
+
+  .event-header-container {
+    margin-bottom: calc($gap * 0.75);
+  }
+
+  // Reply indicator (shows parent author) - DEPRECATED, use thread-context-indicator
+  .reply-indicator {
+    display: flex;
+    align-items: center;
+    gap: calc($gap / 2);
+    font-size: 14px;
+    color: rgba($color-5, 0.6);
+    margin-bottom: calc($gap / 2);
+    cursor: pointer;
+    transition: color 0.2s ease;
+
+    &:hover {
+      color: rgba($color-5, 0.8);
+    }
+
+    .reply-avatar {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      object-fit: cover;
+      background: $color-3;
+      flex-shrink: 0;
+    }
+
+    .reply-username {
+      color: rgba($color-5, 0.8);
+      font-weight: 500;
+    }
+  }
+
+  // Thread context indicator (shows root, "...", and direct parent)
+  .thread-context-indicator {
+    display: flex;
+    flex-direction: column;
+    gap: calc($gap / 4);
+    margin-bottom: calc($gap / 2);
+    font-size: 14px;
+
+    .thread-context-loading,
+    .thread-context-error {
+      color: rgba($color-5, 0.5);
+      font-style: italic;
+    }
+
+    .thread-context-error {
+      color: rgba(255, 100, 100, 0.8);
+    }
+
+    .thread-context-ellipsis {
+      text-align: left;
+      color: rgba($color-5, 0.4);
+      font-size: 16px;
+      line-height: 1;
+      padding: calc($gap / 8) 0;
+    }
+  }
+}
+
+// Thread context item (standalone - no specificity)
+// Reusable thread context content styling
+.thread-context-content {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: rgba($color-5, 0.7);
+}
+
+.thread-context-item {
+  display: flex;
+  align-items: center;
+  gap: calc($gap / 2);
+  padding: 0 calc($gap / 4);
+  background: rgba($color-3, 0.3);
+  border-radius: calc($gap / 4);
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: rgba($color-3, 0.5);
+
+    .thread-context-content {
+      color: rgba($color-5, 0.9);
+    }
+  }
+}
+
+.note-card {
+  .event-content {
+    color: $color-5;
+    line-height: 1.5;
+    margin-bottom: calc($gap * 0.75);
+
+    word-wrap: break-word;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    hyphens: auto;
+
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+
+    &.has-long-content {
+      word-break: break-word;
+      white-space: pre-wrap;
+    }
+  }
+
+  // Collapsible long notes wrapper
+  .collapsible-wrapper {
+    &.is-collapsed {
+      max-height: 40vh;
+      overflow: hidden;
+      position: relative;
+      margin-bottom: calc($gap / 2);
+
+      // Fade out gradient at bottom
+      &::after {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 80px;
+        background: linear-gradient(to bottom, transparent, $color-1);
+        pointer-events: none;
+      }
+    }
+
+    &.is-expanded {
+      max-height: none;
+      margin-bottom: calc($gap / 2);
+    }
+  }
+
+  // Button styles moved to molecules/_buttons.scss
+
+  // Poll options container
+  .poll-options {
+    display: flex;
+    flex-direction: column;
+    gap: calc($gap / 2);
+    margin: calc($gap * 0.75) 0;
+  }
+}
+
+// Poll option (standalone - no specificity)
+.poll-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: calc($gap / 2) calc($gap * 0.75);
+  background: rgba($color-3, 0.3);
+  border: 1px solid rgba($color-4, 0.2);
+  border-radius: calc($gap / 2);
+  font-size: 15px;
+  color: $color-5;
+  text-align: left;
+  cursor: not-allowed;
+  transition: all 0.2s ease;
+  overflow: hidden;
+
+  &:disabled {
+    opacity: 0.7;
+  }
+
+  // Progress bar background (using CSS variable)
+  &.has-votes::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: var(--vote-percentage, 0%);
+    background: linear-gradient(
+      90deg,
+      rgba($color-4, 0.2) 0%,
+      rgba($color-4, 0.1) 100%
+    );
+    border-radius: calc($gap / 2);
+    transition: width 0.3s ease;
+    z-index: 0;
+  }
+}
+
+// Poll option text (standalone - above progress bar)
+.poll-option-text {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  font-weight: 500;
+}
+
+// Poll option stats (standalone)
+.poll-option-stats {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: calc($gap / 4);
+  font-size: 14px;
+  color: rgba($color-5, 0.7);
+  white-space: nowrap;
+}
+
+// Poll option count (standalone)
+.poll-option-count {
+  font-weight: 500;
+}
+
+.note-card {
+
+  // ISL container
+  .event-isl-container {
+    margin-top: calc($gap * 0.75);
+  }
+
+  // Repost modifier (note-card--repost contains nested note-card)
+  &.note-card--repost {
+    // Article preview container in repost
+    .repost-article-container {
+      margin-top: calc($gap / 2);
+    }
+
+    // Nested note-card (original note) should not have bottom border/margin
+    > .note-card {
+      border-bottom: none;
+      margin-bottom: 0;
+
+      &:hover {
+        background: transparent; // Hover effect on parent only
+      }
+    }
+  }
+}
+
+// Repost header (standalone)
+.repost-header {
+  display: flex;
+  align-items: center;
+  gap: calc($gap / 2);
+  font-size: 14px;
+  color: rgba($color-5, 0.7);
+  margin: calc($gap * 0.75) 0;
+}
+
+// Repost icon (standalone)
+.repost-icon {
+  display: flex;
+  align-items: center;
+  width: 16px;
+  height: 16px;
+  color: rgba($color-5, 0.6);
+
+  svg {
+    width: 100%;
+    height: 100%;
+  }
+}
+
+// Reposter name (standalone)
+.reposter-name {
+  color: $color-4;
+  text-decoration: none;
+  font-weight: 500;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+// Error state for note-card
+.note-card--error {
+  background: rgba($color-error, 0.1);
+  border: 1px solid rgba($color-error, 0.3);
+  padding: $gap;
+  border-radius: 6px;
+
+  .note-error {
+    color: $color-error;
+  }
+}

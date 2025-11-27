@@ -1,0 +1,60 @@
+/**
+ * Global link styles
+ * All links across the app follow this consistent behavior
+ */
+
+@use 'sass:color';
+@use '../abstracts/variables' as *;
+
+a {
+  color: $color-4; // Pink (interactive color)
+  text-decoration: none;
+  cursor: pointer;
+  transition: text-decoration 0.2s ease;
+
+  &:hover {
+    text-decoration: underline;
+    // No color change on hover - only underline
+  }
+
+  &:active,
+  &:focus {
+    text-decoration: underline;
+    // No color change - only underline
+  }
+
+  &:visited {
+    color: $color-4; // Same color as unvisited
+  }
+}
+
+// Mention links with profile picture (base - no background)
+.mention-link {
+  display: inline-block;
+  vertical-align: baseline;
+
+  &:hover,
+  &:active,
+  &:focus {
+    text-decoration: none;
+  }
+
+  .profile-pic {
+    display: inline-block;
+    vertical-align: text-bottom;
+    margin-right: 5px;
+  }
+}
+
+// Modifier: with background (for inline mentions, Analytics Modal, etc.)
+.mention-link--bg {
+  background-color: color.adjust($color-2, $lightness: 10%);
+  border-radius: 1rem;
+  padding: 2px 4px;
+
+  &:hover,
+  &:active,
+  &:focus {
+    background-color: color.adjust($color-2, $lightness: 20%);
+  }
+}

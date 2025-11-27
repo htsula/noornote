@@ -1,0 +1,225 @@
+/**
+ * ProfileSearchComponent - Search trigger for profile pages
+ * Uses ProfileSearchOrchestrator for client-side filtering
+ */
+
+import { ProfileSearchOrchestrator } from '../../services/orchestration/ProfileSearchOrchestrator';
+import { EventBus } from '../../services/EventBus';
+
+export class ProfileSearchComponent {
+  private container: HTMLElement;
+  private pubkeyHex: string;
+  private orchestrator: ProfileSearchOrchestrator;
+  private eventBus: EventBus;
+  private isExpanded: boolean = false;
+  private escapeHandler: ((e: KeyboardEvent) => void) | null = null;
+
+  constructor(pubkeyHex: string) {
+    this.pubkeyHex = pubkeyHex;
+    this.orchestrator = ProfileSearchOrchestrator.getInstance();
+    this.eventBus = EventBus.getInstance();
+    this.container = this.createElement();
+    this.setupEventListeners();
+  }
+
+  /**
+   * Create search component structure
+   */
+  private createElement(): HTMLElement {
+    const container = document.createElement('div');
+    container.className = 'profile-search';
+
+    container.innerHTML = `
+      <div class="profile-search__trigger">
+        <a href="#" class="profile-search__link">Search in this npub</a>
+      </div>
+      <div class="profile-search__overlay" style="display: none;">
+        <button class="profile-search__close" type="button" title="Close (ESC)">×</button>
+        <div class="profile-search__form">
+          <input
+            type="text"
+            class="profile-search__input"
+            placeholder="Search terms..."
+          />
+          <button class="profile-search__btn btn-medium btn-passive" type="button">
+            Search
+          </button>
+        </div>
+        <div class="profile-search__status" style="display: none;"></div>
+      </div>
+    `;
+
+    return container;
+  }
+
+  /**
+   * Setup event listeners
+   */
+  private setupEventListeners(): void {
+    const link = this.container.querySelector('.profile-search__link');
+    const input = this.container.querySelector('.profile-search__input') as HTMLInputElement;
+    const button = this.container.querySelector('.profile-search__btn');
+    const closeBtn = this.container.querySelector('.profile-search__close');
+
+    // Toggle search field
+    link?.addEventListener('click', (e) => {
+      e.preventDefault();
+      this.expandSearch();
+    });
+
+    // Handle Enter key in input
+    input?.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        this.performSearch();
+      }
+    });
+
+    // Handle search button click
+    button?.addEventListener('click', () => {
+      this.performSearch();
+    });
+
+    // Handle close button click
+    closeBtn?.addEventListener('click', () => {
+      this.collapseSearch();
+    });
+  }
+
+  /**
+   * Expand search overlay
+   */
+  private expandSearch(): void {
+    if (this.isExpanded) return;
+
+    const trigger = this.container.querySelector('.profile-search__trigger') as HTMLElement;
+    const overlay = this.container.querySelector('.profile-search__overlay') as HTMLElement;
+
+    trigger.style.display = 'none';
+    overlay.style.display = 'flex';
+    this.isExpanded = true;
+
+    // Focus input
+    const input = this.container.querySelector('.profile-search__input') as HTMLInputElement;
+    setTimeout(() => input?.focus(), 100);
+
+    // Add ESC key listener
+    this.escapeHandler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        this.collapseSearch();
+      }
+    };
+    document.addEventListener('keydown', this.escapeHandler);
+  }
+
+  /**
+   * Collapse search overlay
+   */
+  public collapseSearch(): void {
+    if (!this.isExpanded) return;
+
+    const trigger = this.container.querySelector('.profile-search__trigger') as HTMLElement;
+    const overlay = this.container.querySelector('.profile-search__overlay') as HTMLElement;
+    const input = this.container.querySelector('.profile-search__input') as HTMLInputElement;
+
+    overlay.style.display = 'none';
+    trigger.style.display = 'block';
+    this.isExpanded = false;
+
+    // Clear input
+    if (input) input.value = '';
+
+    // Remove ESC key listener
+    if (this.escapeHandler) {
+      document.removeEventListener('keydown', this.escapeHandler);
+      this.escapeHandler = null;
+    }
+  }
+
+  /**
+   * Perform search
+   */
+  private async performSearch(): Promise<void> {
+    const input = this.container.querySelector('.profile-search__input') as HTMLInputElement;
+    const button = this.container.querySelector('.profile-search__btn') as HTMLButtonElement;
+    const searchTerms = input.value.trim();
+
+    // Validation
+    if (!searchTerms) return;
+
+    try {
+      // Disable button during search
+      button.disabled = true;
+      button.textContent = 'Searching...';
+
+      // Perform search via ProfileSearchOrchestrator (fetches all notes, client-side filter)
+      const result = await this.orchestrator.searchUserNotes({
+        pubkeyHex: this.pubkeyHex,
+        searchTerms,
+        onProgress: (message) => this.showStatus(message, 'info')
+      });
+
+      // Emit event with results for GlobalSearchView to display
+      this.eventBus.emit('profileSearch:complete', {
+        query: searchTerms,
+        results: result.events,
+        meta: `${result.matchCount} match${result.matchCount !== 1 ? 'es' : ''} found (searched ${result.totalNotes} note${result.totalNotes !== 1 ? 's' : ''} from ${result.dateRange.start} to ${result.dateRange.end})`
+      });
+
+      // Hide status
+      this.hideStatus();
+
+      // Reset button
+      button.disabled = false;
+      button.textContent = 'Search';
+
+      // Collapse overlay
+      this.collapseSearch();
+
+    } catch (error) {
+      console.error('[ProfileSearch] Search failed:', error);
+      this.showStatus(`Search failed: ${error}`, 'error');
+      button.disabled = false;
+      button.textContent = 'Search';
+    }
+  }
+
+  /**
+   * Show status message
+   */
+  private showStatus(message: string, type: 'info' | 'error'): void {
+    const status = this.container.querySelector('.profile-search__status') as HTMLElement;
+    if (status) {
+      status.textContent = message;
+      status.className = `profile-search__status profile-search__status--${type}`;
+      status.style.display = 'block';
+    }
+  }
+
+  /**
+   * Hide status message
+   */
+  private hideStatus(): void {
+    const status = this.container.querySelector('.profile-search__status') as HTMLElement;
+    if (status) {
+      status.style.display = 'none';
+    }
+  }
+
+  /**
+   * Get DOM element
+   */
+  public getElement(): HTMLElement {
+    return this.container;
+  }
+
+  /**
+   * Cleanup
+   */
+  public destroy(): void {
+    if (this.escapeHandler) {
+      document.removeEventListener('keydown', this.escapeHandler);
+    }
+    this.container.remove();
+  }
+}

@@ -1,0 +1,232 @@
+/**
+ * Typography - Font styles and text utilities
+ * Consistent typography across the application
+ */
+
+@use '../abstracts/variables' as *;
+@use '../abstracts/mixins' as *;
+
+// Heading styles
+h1 {
+  @include heading-xl;
+  margin-bottom: $gap * 1.5;
+}
+
+h2 {
+  @include heading-lg;
+  margin-bottom: $gap;
+}
+
+h3 {
+  @include heading-md;
+  margin-bottom: $gap;
+}
+
+h4 {
+  @include heading-sm;
+  margin-bottom: $gap;
+}
+
+h5,
+h6 {
+  @include heading-base;
+  font-size: 18px;
+  margin-bottom: $gap;
+}
+
+// Paragraph styles
+p {
+  margin-bottom: $gap;
+  color: var(--color-text-primary);
+  line-height: $line-height-relaxed;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+
+  &.lead {
+    font-size: 18px;
+    font-weight: $font-weight-medium;
+    color: var(--color-text-secondary);
+  }
+
+  &.small {
+    font-size: 14px;
+    color: var(--color-text-secondary);
+  }
+}
+
+// Link styles moved to atoms/_links.scss for global consistency
+
+// List styles
+ul,
+ol {
+  margin-bottom: $gap;
+  padding-left: $gap * 1.5;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+ul {
+  list-style-type: disc;
+}
+
+ol {
+  list-style-type: decimal;
+}
+
+li {
+  margin-bottom: calc($gap / 4);
+  line-height: $line-height-relaxed;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+// Definition lists
+dl {
+  margin-bottom: $gap;
+}
+
+dt {
+  font-weight: $font-weight-semibold;
+  color: var(--color-text-primary);
+  margin-bottom: calc($gap / 4);
+}
+
+dd {
+  margin-bottom: $gap;
+  color: var(--color-text-secondary);
+  margin-left: $gap;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+// Inline text elements
+strong,
+b {
+  font-weight: $font-weight-semibold;
+  color: var(--color-text-primary);
+}
+
+em,
+i {
+  font-style: italic;
+}
+
+small {
+  font-size: 14px;
+  color: var(--color-text-secondary);
+}
+
+mark {
+  background-color: rgba($color-warning, 0.2);
+  color: var(--color-text-primary);
+  padding: 0 calc($gap / 4);
+  border-radius: $radius-sm;
+}
+
+// Code elements
+code {
+  font-family: $font-family-mono;
+  font-size: 0.875em;
+  background-color: var(--color-surface);
+  color: inherit;
+  padding: calc($gap / 4) calc($gap / 2);
+  border-radius: $radius-sm;
+  border: 1px solid var(--color-border);
+}
+
+pre {
+  font-family: $font-family-mono;
+  font-size: 14px;
+  line-height: $line-height-relaxed;
+  background-color: var(--color-surface);
+  color: var(--color-text-primary);
+  padding: $gap;
+  border-radius: $radius-lg;
+  border: 1px solid var(--color-border);
+  overflow-x: auto;
+  margin-bottom: $gap;
+
+  code {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: inherit;
+  }
+}
+
+// Blockquotes
+blockquote {
+  font-size: 18px;
+  line-height: $line-height-relaxed;
+  color: var(--color-text-secondary);
+  border-left: 4px solid $color-4;
+  padding-left: $gap;
+  margin: $gap * 1.5 0;
+  font-style: italic;
+
+  p:last-child {
+    margin-bottom: 0;
+  }
+
+  cite {
+    display: block;
+    font-size: 14px;
+    font-style: normal;
+    color: var(--color-text-tertiary);
+    margin-top: calc($gap / 2);
+
+    &::before {
+      content: '— ';
+    }
+  }
+}
+
+// Horizontal rule
+hr {
+  border: none;
+  height: 1px;
+  background-color: var(--color-border);
+  margin: $gap * 2 0;
+}
+
+// Text utility classes
+.text-xs { font-size: 12px; }
+.text-sm { font-size: 14px; }
+.text-base { font-size: 16px; }
+.text-lg { font-size: 18px; }
+.text-xl { font-size: 20px; }
+.text-2xl { font-size: 24px; }
+.text-3xl { font-size: 30px; }
+
+.font-light { font-weight: $font-weight-light; }
+.font-normal { font-weight: $font-weight-normal; }
+.font-medium { font-weight: $font-weight-medium; }
+.font-semibold { font-weight: $font-weight-semibold; }
+.font-bold { font-weight: $font-weight-bold; }
+
+.text-left { text-align: left; }
+.text-center { text-align: center; }
+.text-right { text-align: right; }
+
+.text-primary { color: var(--color-text-primary); }
+.text-secondary { color: var(--color-text-secondary); }
+.text-tertiary { color: var(--color-text-tertiary); }
+.text-interactive { color: var(--color-text-interactive); }
+.text-accent { color: var(--color-accent); }
+
+.text-truncate { @include text-truncate; }
+.text-truncate-2 { @include text-truncate-lines(2); }
+.text-truncate-3 { @include text-truncate-lines(3); }
+
+// Heading variants
+.heading--sidebar-subheading {
+  margin-bottom: calc($gap / 2);
+}

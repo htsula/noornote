@@ -1,0 +1,605 @@
+/**
+ * ZapService - Lightning Zaps via NWC (NIP-57)
+ * Handles zap requests, LNURL fetching, and invoice payments
+ *
+ * NIP-57: https://github.com/nostr-protocol/nips/blob/master/57.md
+ */
+
+import type { Event as NostrEvent } from '@nostr-dev-kit/ndk';
+import { finishEvent } from './NostrToolsAdapter';
+import { NWCService } from './NWCService';
+import { AuthService } from './AuthService';
+import { UserProfileService } from './UserProfileService';
+import { RelayConfig } from './RelayConfig';
+import { NostrTransport } from './transport/NostrTransport';
+import { ErrorService } from './ErrorService';
+import { ToastService } from './ToastService';
+import { SystemLogger } from '../components/system/SystemLogger';
+import { OutboundRelaysOrchestrator } from './orchestration/OutboundRelaysOrchestrator';
+import { SignatureVerificationService } from './security/SignatureVerificationService';
+
+export interface ZapRequest {
+  noteId: string;
+  authorPubkey: string;
+  amount: number; // in sats
+  comment?: string;
+}
+
+export interface ZapResult {
+  success: boolean;
+  error?: string;
+  invoice?: string;
+  preimage?: string;
+  amount?: number; // Amount in sats (for optimistic UI update)
+}
+
+export class ZapService {
+  private static instance: ZapService;
+  private nwcService: NWCService;
+  private authService: AuthService;
+  private userProfileService: UserProfileService;
+  private relayConfig: RelayConfig;
+  private nostrTransport: NostrTransport;
+  private systemLogger: SystemLogger;
+  private outboundRelaysFetcher: OutboundRelaysOrchestrator;
+  private zapDefaultsStorageKey = 'noornote_zap_defaults';
+
+  private constructor() {
+    this.nwcService = NWCService.getInstance();
+    this.authService = AuthService.getInstance();
+    this.userProfileService = UserProfileService.getInstance();
+    this.relayConfig = RelayConfig.getInstance();
+    this.nostrTransport = NostrTransport.getInstance();
+    this.systemLogger = SystemLogger.getInstance();
+    this.outboundRelaysFetcher = OutboundRelaysOrchestrator.getInstance();
+  }
+
+  public static getInstance(): ZapService {
+    if (!ZapService.instance) {
+      ZapService.instance = new ZapService();
+    }
+    return ZapService.instance;
+  }
+
+  /**
+   * Send quick zap with default amount and comment from settings
+   */
+  public async sendQuickZap(noteId: string, authorPubkey: string): Promise<ZapResult> {
+    // Check NWC connection
+    if (!this.nwcService.isConnected()) {
+      ToastService.show('Please connect Lightning Wallet', 'error');
+      return { success: false, error: 'NWC not connected' };
+    }
+
+    // Get defaults from Keychain/localStorage
+    const defaults = await this.getZapDefaults();
+
+    return this.sendZap({
+      noteId,
+      authorPubkey,
+      amount: defaults.amount,
+      comment: defaults.comment
+    });
+  }
+
+  /**
+   * Send custom zap with specified amount and comment
+   */
+  public async sendCustomZap(
+    noteId: string,
+    authorPubkey: string,
+    amount: number,
+    comment?: string
+  ): Promise<ZapResult> {
+    // Check NWC connection
+    if (!this.nwcService.isConnected()) {
+      ToastService.show('Please connect Lightning Wallet', 'error');
+      return { success: false, error: 'NWC not connected' };
+    }
+
+    return this.sendZap({
+      noteId,
+      authorPubkey,
+      amount,
+      comment
+    });
+  }
+
+  /**
+   * Core zap flow: Create zap request → Fetch invoice → Pay with NWC → Verify receipt
+   * Includes 45-second timeout for entire operation (15s for receipt verification)
+   */
+  private async sendZap(request: ZapRequest): Promise<ZapResult> {
+    try {
+      // Wrap entire zap flow in 45-second timeout (payment + 15s receipt verification)
+      const zapPromise = this.executeZapFlow(request);
+      const timeoutPromise = new Promise<ZapResult>((_, reject) => {
+        setTimeout(() => reject(new Error('Zap timeout after 45 seconds')), 45000);
+      });
+
+      return await Promise.race([zapPromise, timeoutPromise]);
+    } catch (error) {
+      this.systemLogger.error('ZapService', 'Zap flow failed', error);
+
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const isTimeout = errorMessage.includes('timeout');
+
+      ToastService.show(
+        isTimeout ? 'Zap timeout - please try again' : 'Could not zap note',
+        'error'
+      );
+
+      return {
+        success: false,
+        error: errorMessage
+      };
+    }
+  }
+
+  /**
+   * Execute zap flow without timeout wrapper
+   */
+  private async executeZapFlow(request: ZapRequest): Promise<ZapResult> {
+    // Step 1: Get LNURL from author's profile
+    const lnurl = await this.getLNURLFromProfile(request.authorPubkey);
+    if (!lnurl) {
+      ToastService.show('User cannot receive zaps', 'error');
+      return { success: false, error: 'No LNURL found in profile' };
+    }
+
+    // Step 2: Create zap request event (kind 9734)
+    const zapRequestEvent = await this.createZapRequestEvent(request);
+    if (!zapRequestEvent) {
+      ToastService.show('Failed to create zap request', 'error');
+      return { success: false, error: 'Failed to create zap request event' };
+    }
+
+    // Step 3: Fetch invoice from LNURL callback
+    const invoice = await this.fetchInvoice(lnurl, zapRequestEvent, request.amount);
+    if (!invoice) {
+      ToastService.show('Failed to fetch invoice', 'error');
+      return { success: false, error: 'Failed to fetch invoice' };
+    }
+
+    this.systemLogger.info('ZapService', 'Invoice received');
+
+    // Step 4: Pay invoice with NWC
+    const paymentResult = await this.nwcService.payInvoice(invoice);
+
+    if (!paymentResult.success) {
+      this.systemLogger.error('ZapService', 'Payment failed', paymentResult.error);
+      ToastService.show('Payment failed', 'error');
+      return {
+        success: false,
+        error: paymentResult.error || 'Payment failed'
+      };
+    }
+
+    this.systemLogger.info('ZapService', '✅ Payment successful!');
+
+    // Store zap locally for consistent UI (optimistic update)
+    this.storeUserZap(request.noteId, request.amount);
+
+    // Show success immediately (UX like Jumble - don't wait for receipt)
+    ToastService.show(`⚡ ${request.amount} Sats zapped!`, 'success');
+
+    // Step 5: Verify zap receipt in background (don't await - let stats update naturally)
+    this.waitForZapReceipt(invoice, request.authorPubkey).then((verified) => {
+      if (verified) {
+        this.systemLogger.info('ZapService', '✅ Zap receipt verified on relays');
+      } else {
+        this.systemLogger.warn('ZapService', '⚠️ Zap receipt not found on relays (payment was successful though)');
+      }
+    });
+
+    return {
+      success: true,
+      invoice,
+      preimage: paymentResult.preimage,
+      amount: request.amount // Return amount for ISL optimistic update
+    };
+  }
+
+  /**
+   * Get LNURL callback from user profile
+   * Returns the callback URL needed to request invoice
+   * FALLBACK: If lud16/lud06 missing, fetch profile from user's outbound relays
+   */
+  private async getLNURLFromProfile(pubkey: string): Promise<string | null> {
+    try {
+      // Step 1: Try to get profile from standard relays
+      let profile = await this.userProfileService.getUserProfile(pubkey);
+
+      // Step 2: Check if profile exists AND has lud16/lud06
+      if (!profile || (!profile.lud16 && !profile.lud06)) {
+        this.systemLogger.info('ZapService', '⚠️ No profile or lud16/lud06 found in standard relays, trying user\'s outbound relays...');
+
+        // FALLBACK: Fetch profile from user's outbound relays
+        profile = await this.fetchProfileFromUserRelays(pubkey);
+
+        if (!profile || (!profile.lud16 && !profile.lud06)) {
+          this.systemLogger.warn('ZapService', '❌ No lud16/lud06 found in user\'s relays either');
+          return null;
+        }
+
+        this.systemLogger.info('ZapService', `✅ Found lud16/lud06 in user's relays: ${profile.lud16 || profile.lud06}`);
+      } else {
+        this.systemLogger.info('ZapService', `Profile found in standard relays: lud16=${profile.lud16}, lud06=${profile.lud06}`);
+      }
+
+      // Step 3: Get zap endpoint (callback + lnurl)
+      const zapEndpoint = await this.getZapEndpoint({
+        lud16: profile.lud16,
+        lud06: profile.lud06
+      });
+
+      if (!zapEndpoint) {
+        this.systemLogger.warn('ZapService', '❌ No valid zap endpoint found');
+        return null;
+      }
+
+      // Return the callback URL
+      return zapEndpoint.callback;
+    } catch (error) {
+      this.systemLogger.error('ZapService', '❌ Failed to get LNURL from profile', error);
+      return null;
+    }
+  }
+
+  /**
+   * FALLBACK: Fetch profile from user's outbound relays (Kind 10002 → Kind 0)
+   * Only called when lud16/lud06 is missing from standard relay profile
+   */
+  private async fetchProfileFromUserRelays(pubkey: string): Promise<any> {
+    try {
+      // Step 1: Fetch user's outbound relays (Kind 10002)
+      const userRelays = await this.outboundRelaysFetcher.discoverUserRelays([pubkey]);
+
+      if (userRelays.length === 0 || userRelays[0].writeRelays.length === 0) {
+        this.systemLogger.warn('ZapService', '❌ No outbound relays found for user');
+        return null;
+      }
+
+      const writeRelays = userRelays[0].writeRelays;
+      this.systemLogger.info('ZapService', `Found ${writeRelays.length} outbound relays`);
+
+      // Step 2: Fetch Kind 0 (profile) from user's outbound relays
+      const profiles: NostrEvent[] = [];
+
+      await new Promise<void>((resolve) => {
+        const sub = this.nostrTransport.subscribe(
+          writeRelays,
+          [{ kinds: [0], authors: [pubkey], limit: 1 }],
+          {
+            onEvent: (event: NostrEvent) => {
+              profiles.push(event);
+            },
+            onEose: () => {
+              sub.close();
+              resolve();
+            }
+          }
+        );
+
+        // Timeout after 5 seconds
+        setTimeout(() => {
+          sub.close();
+          resolve();
+        }, 5000);
+      });
+
+      if (profiles.length === 0) {
+        this.systemLogger.warn('ZapService', '❌ No profile found in user\'s relays');
+        return null;
+      }
+
+      // Step 3: Parse profile content
+      const latestProfile = profiles.sort((a, b) => b.created_at - a.created_at)[0];
+      const profileData = JSON.parse(latestProfile.content);
+
+      this.systemLogger.info('ZapService', `✅ Profile fetched from user's relays`);
+
+      return {
+        pubkey,
+        lud16: profileData.lud16,
+        lud06: profileData.lud06,
+        name: profileData.name,
+        display_name: profileData.display_name
+      };
+    } catch (error) {
+      this.systemLogger.error('ZapService', '❌ Failed to fetch profile from user relays', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get zap endpoint (callback + lnurl) from profile
+   * Implements NIP-57 LNURL-pay protocol
+   */
+  private async getZapEndpoint(profile: {
+    lud16?: string;
+    lud06?: string;
+  }): Promise<{ callback: string; lnurl: string } | null> {
+    try {
+      let lnurl = '';
+
+      // Try lud16 (Lightning Address) first
+      if (profile.lud16 && profile.lud16.includes('@')) {
+        const [name, domain] = profile.lud16.split('@');
+        if (!name || !domain) {
+          this.systemLogger.warn('ZapService', 'Invalid lud16 format', profile.lud16);
+          return null;
+        }
+        lnurl = new URL(`/.well-known/lnurlp/${name}`, `https://${domain}`).toString();
+      }
+      // lud06 (legacy LNURL) not supported - modern wallets use lud16
+      else if (profile.lud06) {
+        this.systemLogger.warn('ZapService', 'lud06 not supported, use lud16 (Lightning Address)');
+        return null;
+      } else {
+        this.systemLogger.warn('ZapService', 'No lud16 or lud06 in profile');
+        return null;
+      }
+
+      // Fetch LNURL pay request with 10-second timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+      try {
+        const res = await fetch(lnurl, { signal: controller.signal });
+        clearTimeout(timeoutId);
+
+        if (!res.ok) {
+          throw new Error(`LNURL fetch failed: ${res.status}`);
+        }
+
+        const body = await res.json();
+
+        // CRITICAL: Check for Nostr support (NIP-57 requirement)
+        if (body.allowsNostr && body.nostrPubkey) {
+          return {
+            callback: body.callback,
+            lnurl,
+          };
+        } else {
+          this.systemLogger.warn('ZapService', 'LNURL does not support Nostr zaps (allowsNostr or nostrPubkey missing)');
+          return null;
+        }
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+          throw new Error('LNURL fetch timeout (10s)');
+        }
+        throw fetchError;
+      }
+    } catch (error) {
+      this.systemLogger.error('ZapService', 'Failed to get zap endpoint', error);
+      return null;
+    }
+  }
+
+  /**
+   * Decode LNURL (lud06) to https URL
+   * NOT IMPLEMENTED: lud06 (legacy LNURL) not supported
+   * Modern wallets use lud16 (Lightning Address) instead
+   */
+  private decodeLNURL(lud06: string): string {
+    throw new Error('lud06 not supported - use lud16 (Lightning Address)');
+  }
+
+  /**
+   * Create zap request event (kind 9734)
+   */
+  private async createZapRequestEvent(request: ZapRequest): Promise<NostrEvent | null> {
+    try {
+      const currentUser = this.authService.getCurrentUser();
+      if (!currentUser) {
+        this.systemLogger.error('ZapService', 'No user logged in');
+        return null;
+      }
+
+      // Get relays for zap receipt publication
+      const relays = this.relayConfig.getWriteRelays();
+
+      const unsignedEvent = {
+        kind: 9734,
+        created_at: Math.floor(Date.now() / 1000),
+        tags: [
+          ['p', request.authorPubkey], // Recipient pubkey
+          ['e', request.noteId], // Note being zapped
+          ['amount', (request.amount * 1000).toString()], // Amount in millisats
+          ...relays.map(relay => ['relays', relay]) // Relays for zap receipt
+        ],
+        content: request.comment || '',
+        pubkey: currentUser.pubkey
+      };
+
+      // Sign event with browser extension
+      const signedEvent = await this.authService.signEvent(unsignedEvent);
+      return signedEvent;
+    } catch (error) {
+      this.systemLogger.error('ZapService', 'Failed to create zap request event', error);
+      ErrorService.handle(
+        error,
+        'ZapService.createZapRequestEvent',
+        true,
+        'Fehler beim Erstellen der Zap-Anfrage'
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Fetch Lightning invoice from LNURL callback
+   */
+  private async fetchInvoice(
+    lnurl: string,
+    zapRequestEvent: NostrEvent,
+    amountSats: number
+  ): Promise<string | null> {
+    try {
+      // Build callback URL with query parameters
+      const amountMillisats = amountSats * 1000;
+      const nostrParam = encodeURIComponent(JSON.stringify(zapRequestEvent));
+
+      const callbackUrl = `${lnurl}?amount=${amountMillisats}&nostr=${nostrParam}`;
+
+      // Fetch invoice from LNURL server with 10-second timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+      try {
+        const response = await fetch(callbackUrl, { signal: controller.signal });
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          throw new Error(`LNURL server error: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (data.status === 'ERROR') {
+          throw new Error(data.reason || 'LNURL server returned error');
+        }
+
+        if (!data.pr) {
+          throw new Error('No invoice (pr) in LNURL response');
+        }
+
+        return data.pr; // Lightning invoice
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+          throw new Error('Invoice fetch timeout (10s)');
+        }
+        throw fetchError;
+      }
+    } catch (error) {
+      // Silent error - already handled by UI
+      return null;
+    }
+  }
+
+  /**
+   * Wait for zap receipt (kind 9735) on relays after payment
+   * Verifies that LNURL server published the zap receipt
+   */
+  private async waitForZapReceipt(invoice: string, recipientPubkey: string): Promise<boolean> {
+    return new Promise((resolve) => {
+      try {
+        const relays = this.relayConfig.getReadRelays();
+        const pool = this.nostrTransport.getPool();
+
+        // Subscribe to zap receipts (kind 9735) for recipient in last minute
+        const oneMinuteAgo = Math.floor(Date.now() / 1000) - 60;
+
+        this.systemLogger.info('ZapService', `🔍 Subscribing to zap receipts for ${recipientPubkey.slice(0, 8)}...`);
+
+        const verificationService = SignatureVerificationService.getInstance();
+
+        const sub = pool.subscribeMany(relays, [
+          {
+            kinds: [9735], // Zap receipt
+            '#p': [recipientPubkey], // Recipient pubkey
+            since: oneMinuteAgo
+          }
+        ], {
+          onevent: (event) => {
+            // Security: Verify signature before processing
+            const verification = verificationService.verifyEvent(event);
+            if (!verification.valid) {
+              this.systemLogger.warn('ZapService', `🚫 Rejected invalid zap receipt ${event.id.slice(0, 8)}: ${verification.error}`);
+              return;
+            }
+
+            this.systemLogger.info('ZapService', `📨 Received zap receipt event ${event.id.slice(0, 8)}`);
+            // Extract bolt11 invoice from zap receipt
+            const boltTag = event.tags.find(tag => tag[0] === 'bolt11');
+            if (boltTag && boltTag[1] === invoice) {
+              this.systemLogger.info('ZapService', '✅ Zap receipt found!');
+              sub.close();
+              resolve(true);
+            } else {
+              this.systemLogger.info('ZapService', `Invoice mismatch: ${boltTag?.[1]?.slice(0, 20)} !== ${invoice.slice(0, 20)}`);
+            }
+          },
+          oneose: () => {
+            this.systemLogger.info('ZapService', 'EOSE received, zap receipts loaded');
+          }
+        });
+
+        // Timeout after 15 seconds (LNURL server should publish receipt quickly)
+        setTimeout(() => {
+          this.systemLogger.warn('ZapService', '⏱️ Zap receipt timeout (15s)');
+          sub.close();
+          resolve(false);
+        }, 15000);
+      } catch (error) {
+        this.systemLogger.error('ZapService', 'Failed to subscribe to zap receipts', error);
+        resolve(false);
+      }
+    });
+  }
+
+  /**
+   * Get zap defaults from localStorage
+   */
+  private async getZapDefaults(): Promise<{ amount: number; comment: string }> {
+    try {
+      const { KeychainStorage } = await import('./KeychainStorage');
+      const stored = await KeychainStorage.loadZapDefaults();
+      if (stored) {
+        return stored;
+      }
+    } catch (error) {
+      this.systemLogger.warn('ZapService', 'Failed to load zap defaults', error);
+    }
+
+    // Default values
+    return {
+      amount: 7,
+      comment: 'NoorNote Zap ⚡'
+    };
+  }
+
+  /**
+   * Store user's zap in localStorage for optimistic UI
+   * Format: zap_{userPubkey}_{noteId} = amount (in sats)
+   */
+  private storeUserZap(noteId: string, amount: number): void {
+    try {
+      const currentUser = this.authService.getCurrentUser();
+      if (!currentUser) return;
+
+      const zapKey = `zap_${currentUser.pubkey}_${noteId}`;
+      localStorage.setItem(zapKey, amount.toString());
+      this.systemLogger.info('ZapService', `Stored zap: ${amount} sats for note ${noteId.slice(0, 8)}`);
+    } catch (error) {
+      this.systemLogger.warn('ZapService', 'Failed to store zap in localStorage', error);
+    }
+  }
+
+  /**
+   * Get user's zap amount for a note from localStorage
+   * Returns 0 if user has not zapped this note
+   */
+  public getUserZapAmount(noteId: string): number {
+    try {
+      const currentUser = this.authService.getCurrentUser();
+      if (!currentUser) return 0;
+
+      const zapKey = `zap_${currentUser.pubkey}_${noteId}`;
+      const stored = localStorage.getItem(zapKey);
+      return stored ? parseInt(stored, 10) : 0;
+    } catch (error) {
+      return 0;
+    }
+  }
+
+  /**
+   * Check if user has zapped a note (from localStorage)
+   */
+  public hasUserZapped(noteId: string): boolean {
+    return this.getUserZapAmount(noteId) > 0;
+  }
+}

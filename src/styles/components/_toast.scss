@@ -1,0 +1,163 @@
+/**
+ * Toast Notification Component
+ * Temporary user feedback notifications
+ */
+
+@use '../abstracts/variables' as *;
+@use '../abstracts/mixins' as *;
+
+// Container (fixed position, top-right)
+.toast-container {
+  position: fixed;
+  top: $gap;
+  right: $gap;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: calc($gap / 2);
+  pointer-events: none;
+  max-width: 400px;
+}
+
+// Individual toast
+.toast {
+  display: flex;
+  align-items: center;
+  gap: calc($gap / 2);
+  padding: $gap;
+  background: $color-1;
+  border: 1px solid $color-2;
+  border-radius: calc($gap / 2);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  pointer-events: auto;
+  min-width: 280px;
+  max-width: 400px;
+
+  // Animation states
+  opacity: 0;
+  transform: translateX(100%);
+  transition: all 0.3s ease;
+
+  &--visible {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  &--hiding {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+
+  // Type variants
+  &--success {
+    border-left: 4px solid #7dd87d; // Green
+
+    .toast__icon {
+      color: #7dd87d;
+      background: rgba(125, 216, 125, 0.1);
+    }
+  }
+
+  &--error {
+    border-left: 4px solid #e74c3c; // Red
+
+    .toast__icon {
+      color: #e74c3c;
+      background: rgba(231, 76, 60, 0.1);
+    }
+  }
+
+  &--warning {
+    border-left: 4px solid #ff9800; // Orange
+
+    .toast__icon {
+      color: #ff9800;
+      background: rgba(255, 152, 0, 0.1);
+    }
+  }
+
+  &--info {
+    border-left: 4px solid $color-4; // Pink
+
+    .toast__icon {
+      color: $color-4;
+      background: rgba($color-4, 0.1);
+    }
+  }
+}
+
+// Icon
+.toast__icon {
+  flex-shrink: 0;
+  width: calc($gap * 1.5);
+  height: calc($gap * 1.5);
+  border-radius: 50%;
+  @include flex-center;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+// Message
+.toast__message {
+  flex: 1;
+  color: $color-6;
+  font-size: 14px;
+  line-height: 1.4;
+  word-wrap: break-word;
+}
+
+// Close button
+.toast__close {
+  flex-shrink: 0;
+  width: calc($gap * 1.25);
+  height: calc($gap * 1.25);
+  background: none;
+  border: none;
+  color: $color-4;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: calc($gap / 4);
+  transition: all 0.2s ease;
+  @include flex-center;
+
+  &:hover {
+    background: $color-2;
+    color: $color-6;
+  }
+
+  &:active {
+    transform: scale(0.95);
+  }
+}
+
+// Mobile responsive
+@media (max-width: 768px) {
+  .toast-container {
+    top: calc($gap / 2);
+    right: calc($gap / 2);
+    left: calc($gap / 2);
+    max-width: none;
+  }
+
+  .toast {
+    min-width: auto;
+    max-width: none;
+  }
+}
+
+// Reduced motion
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    transition: opacity 0.1s ease;
+    transform: none;
+
+    &--visible {
+      transform: none;
+    }
+
+    &--hiding {
+      transform: none;
+    }
+  }
+}

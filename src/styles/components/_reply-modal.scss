@@ -1,0 +1,73 @@
+@use '../abstracts/variables' as *;
+@use '../abstracts/mixins' as *;
+
+// Override modal body to prevent scrolling
+.modal__body:has(.reply-modal) {
+  overflow: hidden; // No scroll on modal body
+  display: flex;
+  flex-direction: column;
+}
+
+.reply-modal {
+  display: flex;
+  flex-direction: column;
+  flex: 1; // Fill available space
+  overflow: hidden; // Prevent scrolling on container
+}
+
+// Parent note context (shown above reply editor) - SCROLLABLE
+.reply-modal-parent {
+  flex: 1; // Take available space
+  overflow-y: auto; // Scroll if content is long
+  min-height: 0; // Important for flex overflow
+  padding-bottom: $gap; // Spacing before editor
+  @include custom-scrollbar;
+}
+
+.reply-modal-parent-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: calc($gap / 2);
+}
+
+.reply-modal-parent-note {
+  // Use existing NoteUI styles - no additional styling needed
+  // NoteUI already handles header, content, media, etc.
+
+  // Override: Hide ISL in parent note preview
+  .isl {
+    display: none;
+  }
+
+  // Override: Hide note menu trigger (3-dot button)
+  .note-menu-trigger {
+    display: none;
+  }
+}
+
+// Editor section (tabs + textarea + buttons) - FIXED at bottom
+.reply-modal-editor {
+  flex-shrink: 0; // Don't shrink
+  display: flex;
+  flex-direction: column;
+  gap: calc($gap / 2);
+}
+
+// Reply textarea (smaller than post textarea)
+.reply-modal .post-note-textarea {
+  min-height: 120px; // Smaller to fit fixed layout
+}
+
+// Mobile responsive
+@media (max-width: 768px) {
+  .reply-modal {
+    min-height: 400px;
+  }
+
+  .reply-modal .post-note-textarea {
+    min-height: 120px;
+  }
+}

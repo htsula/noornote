@@ -1,0 +1,194 @@
+/**
+ * Buttons - Unified Button System
+ * All button classes in one place
+ * Purpose-agnostic with modifier classes for size and state
+ */
+
+@use '../abstracts/variables' as *;
+
+// ========================================
+// Base Button
+// ========================================
+.btn {
+  // Base styles
+  color: $color-1;
+  background-color: $color-4;
+  border: 1px solid $color-4;
+  padding: calc($gap / 2) $gap;
+
+  // Layout
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc($gap / 4);
+
+  // Typography
+  font-weight: $font-weight-medium;
+  line-height: $line-height-tight;
+  text-decoration: none;
+  white-space: nowrap;
+
+  // Appearance
+  border-radius: $radius-base;
+  cursor: pointer;
+  transition: $transition-colors;
+
+  // Reset
+  appearance: none;
+  user-select: none;
+
+  // Hover & Focus
+  &:hover {
+    opacity: 0.9;
+  }
+
+  &:focus {
+    outline: 1px solid $color-4;
+    outline-offset: 2px;
+  }
+
+  &:active {
+    transform: scale(0.98);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+// ========================================
+// Size Modifiers
+// ========================================
+
+// Big (default - same as .btn base)
+.btn--big {
+  padding: calc($gap / 2) $gap;
+}
+
+// Medium
+.btn--medium {
+  padding: calc($gap / 4) calc($gap / 2);
+}
+
+// Mini
+.btn--mini {
+  padding: 0 calc($gap / 4);
+  font-size: 14px;
+}
+
+// ========================================
+// State Modifiers
+// ========================================
+
+// Active (default - same as .btn base)
+.btn--active {
+  color: $color-1;
+  background-color: $color-4;
+  border-color: $color-4;
+}
+
+// Passive (inverted)
+.btn--passive {
+  color: $color-4;
+  background-color: $color-1;
+  border-color: $color-4;
+
+  &:hover {
+    background-color: rgba($color-4, 0.1);
+  }
+}
+
+// Danger (for destructive actions)
+.btn--danger {
+  color: white;
+  background-color: #dc3545;
+  border-color: #dc3545;
+
+  &:hover {
+    background-color: #c82333;
+    border-color: #bd2130;
+  }
+
+  &:focus {
+    outline-color: #dc3545;
+  }
+}
+
+// Primary (for main actions)
+.btn--primary {
+  color: white;
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+
+  &:hover {
+    background-color: var(--color-primary-dark);
+    border-color: var(--color-primary-dark);
+  }
+
+  &:focus {
+    outline-color: var(--color-primary);
+  }
+}
+
+// ========================================
+// Refresh Button Modifier
+// ========================================
+
+// Basic refresh button
+.btn--refresh {
+  // Uses default .btn styles
+}
+
+// Refresh with new notes (with avatars)
+.btn--refresh-new-notes {
+  display: flex;
+  align-items: center;
+  gap: calc($gap / 2);
+}
+
+// Stacked avatars container
+.btn--refresh-new-notes__avatars {
+  display: flex;
+  align-items: center;
+  margin-right: calc($gap / 4);
+}
+
+// Individual avatar (stacked with negative margin)
+.btn--refresh-new-notes__avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background-size: cover;
+  background-position: center;
+  background-color: $color-3;
+  margin-left: -8px; // Overlap previous avatar
+
+  &:first-child {
+    margin-left: 0; // No overlap for first avatar
+  }
+}
+
+// Text in refresh button
+.btn--refresh-new-notes__text {
+  font-size: 14px;
+  font-weight: $font-weight-medium;
+  white-space: nowrap;
+}
+
+// ========================================
+// Clear Cache Button Modifier
+// ========================================
+
+.btn--clear-cache {
+  // Uses default .btn styles
+}
+
+// ========================================
+// Show More/Less Button Modifier
+// ========================================
+
+.btn--show-more {
+  display: block;
+  margin: calc($gap * 0.75) auto;
+}

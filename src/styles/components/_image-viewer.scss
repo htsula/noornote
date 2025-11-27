@@ -1,0 +1,228 @@
+/**
+ * Image Viewer Component Styles
+ * Full-screen image viewer with overlay, controls, and navigation
+ */
+
+@use '../abstracts/variables' as *;
+@use 'sass:color';
+
+.image-viewer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &__background {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: color.adjust($color-1, $alpha: -0.5); // 50% transparency
+    cursor: pointer;
+  }
+
+  &__content {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1;
+  }
+
+  &__image-container {
+    max-width: 90vw;
+    max-height: 90vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  &__image {
+    max-width: 100%;
+    max-height: 90vh;
+    object-fit: contain;
+    transition: transform 0.2s ease;
+    cursor: default;
+
+    &:hover {
+      // Cursor changes via JS based on zoom level
+    }
+  }
+
+  // Controls (top right)
+  &__controls {
+    position: absolute;
+    top: $gap;
+    right: $gap;
+    display: flex;
+    gap: calc($gap / 2);
+    z-index: 2;
+  }
+
+  &__btn {
+    width: 48px;
+    height: 48px;
+    border: none;
+    border-radius: 8px;
+    background-color: color.adjust($color-1, $alpha: -0.2); // 80% opacity
+    color: $color-6;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+
+    &:hover:not(:disabled) {
+      background-color: $color-4;
+      color: $color-1;
+      transform: scale(1.05);
+    }
+
+    &:active:not(:disabled) {
+      transform: scale(0.95);
+    }
+
+    &:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+
+    svg {
+      width: 20px;
+      height: 20px;
+    }
+  }
+
+  // Navigation (left/right arrows)
+  &__nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 56px;
+    height: 56px;
+    border: none;
+    border-radius: 50%;
+    background-color: color.adjust($color-1, $alpha: -0.2); // 80% opacity
+    color: $color-6;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    z-index: 2;
+
+    &:hover:not(:disabled) {
+      background-color: $color-4;
+      color: $color-1;
+      transform: translateY(-50%) scale(1.1);
+    }
+
+    &:active:not(:disabled) {
+      transform: translateY(-50%) scale(0.95);
+    }
+
+    &.disabled,
+    &:disabled {
+      opacity: 0.2;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+
+    &--prev {
+      left: $gap * 2;
+    }
+
+    &--next {
+      right: $gap * 2;
+    }
+
+    svg {
+      width: 24px;
+      height: 24px;
+    }
+  }
+
+  // Image counter (bottom center)
+  &__counter {
+    position: absolute;
+    bottom: $gap * 2;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: calc($gap / 2) $gap;
+    background-color: color.adjust($color-1, $alpha: -0.2); // 80% opacity
+    color: $color-6;
+    border-radius: 24px;
+    font-size: 14px;
+    font-weight: 500;
+    z-index: 2;
+  }
+}
+
+// Hover effect for clickable images in notes
+.note-image--clickable {
+  cursor: zoom-in;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+
+  &:hover {
+    opacity: 0.9;
+    transform: scale(1.02);
+  }
+}
+
+// Responsive adjustments
+@media (max-width: 768px) {
+  .image-viewer {
+    &__controls {
+      top: calc($gap / 2);
+      right: calc($gap / 2);
+      gap: calc($gap / 4);
+    }
+
+    &__btn {
+      width: 40px;
+      height: 40px;
+
+      svg {
+        width: 18px;
+        height: 18px;
+      }
+    }
+
+    &__nav {
+      width: 48px;
+      height: 48px;
+
+      &--prev {
+        left: $gap;
+      }
+
+      &--next {
+        right: $gap;
+      }
+
+      svg {
+        width: 20px;
+        height: 20px;
+      }
+    }
+
+    &__counter {
+      bottom: $gap;
+      font-size: 12px;
+      padding: calc($gap / 4) calc($gap / 2);
+    }
+
+    &__image-container {
+      max-width: 95vw;
+      max-height: 95vh;
+    }
+  }
+}

@@ -1,0 +1,43 @@
+/**
+ * TextNoteProcessor - Process kind:1 text notes
+ * Extracts from: NoteUI.processTextNote()
+ */
+
+import type { Event as NostrEvent } from '@nostr-dev-kit/ndk';
+import type { ProcessedNote } from '../types/NoteTypes';
+import { ContentProcessor } from '../../../services/ContentProcessor';
+
+export class TextNoteProcessor {
+  private static contentProcessor = ContentProcessor.getInstance();
+
+  /**
+   * Process kind:1 text note
+   * SYNCHRONOUS - no blocking calls
+   */
+  static process(event: NostrEvent): ProcessedNote {
+    const authorProfile = TextNoteProcessor.contentProcessor.getNonBlockingProfile(event.pubkey);
+    const quoteTags = event.tags.filter(tag => tag[0] === 'q');
+    const isQuote = quoteTags.length > 0;
+
+    const processedContent = TextNoteProcessor.contentProcessor.processContentWithTags(
+      event.content,
+      event.tags
+    );
+
+    return {
+      id: event.id,
+      type: isQuote ? 'quote' : 'original',
+      timestamp: event.created_at,
+      author: {
+        pubkey: event.pubkey,
+        profile: authorProfile ? {
+          name: authorProfile.name,
+          display_name: authorProfile.display_name,
+          picture: authorProfile.picture
+        } : undefined
+      },
+      content: processedContent,
+      rawEvent: event
+    };
+  }
+}

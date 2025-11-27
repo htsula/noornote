@@ -1,0 +1,368 @@
+/**
+ * Timeline Component Styles
+ */
+
+@use 'sass:color';
+@use '../abstracts/variables' as *;
+@use '../abstracts/mixins' as *;
+
+.timeline {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+
+  .timeline-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 0 $gap 0;
+    border-bottom: 1px solid $color-2;
+    background: $color-1;
+
+    .timeline-view-selector {
+      // CustomDropdown component styles in _custom-dropdown.scss
+    }
+
+    .timeline-controls {
+      // Refresh button styles moved to molecules/_buttons.scss
+    }
+  }
+
+  // Timeline item (legacy wrapper from TimelineUI - deprecated)
+  .timeline-item {
+    padding: $gap 0;
+    border-bottom: 1px solid $color-2;
+    background: $color-1;
+    transition: background-color 0.2s ease;
+
+    &:hover {
+      background: rgba($color-2, 0.5);
+    }
+
+    .event-header-container {
+      margin-bottom: calc($gap * 0.75);
+    }
+
+    .event-content {
+      color: $color-5;
+      line-height: 1.5;
+      margin-bottom: calc($gap * 0.75);
+
+      word-wrap: break-word;
+      word-break: break-word;
+      overflow-wrap: break-word;
+      hyphens: auto;
+
+      min-width: 0;
+      max-width: 100%;
+      overflow: hidden;
+    }
+  }
+
+  .timeline-loading {
+    padding: $gap;
+    color: $color-5;
+    text-align: center;
+  }
+
+  .timeline-empty {
+    padding: $gap * 4 $gap * 2;
+    text-align: center;
+    color: $color-5;
+  }
+
+  .timeline-error {
+    padding: $gap * 2;
+    text-align: center;
+    color: $color-5;
+  }
+
+  .timeline-load-trigger {
+    height: 20px;
+    width: 100%;
+  }
+}
+
+// Loading spinner (standalone)
+.loading-spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid rgba($color-4, 0.3);
+  border-top: 2px solid $color-4;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto $gap;
+}
+
+// Timeline empty heading
+.timeline-empty-heading {
+  margin: 0 0 $gap 0;
+  color: $color-4;
+}
+
+// Timeline empty text
+.timeline-empty-text {
+  margin: 0;
+  opacity: 0.8;
+}
+
+// Timeline error heading
+.timeline-error-heading {
+  margin: 0 0 $gap 0;
+  color: $color-error;
+}
+
+// Timeline error text
+.timeline-error-text {
+  margin: 0 0 $gap 0;
+  opacity: 0.8;
+}
+
+// Timeline error button (styles moved to molecules/_buttons.scss if needed)
+.timeline-error-button {
+  background: $color-4;
+  color: $color-1;
+  border: none;
+  padding: calc($gap / 2) $gap;
+  border-radius: 4px;
+  cursor: pointer;
+
+  &:hover {
+    opacity: 0.8;
+  }
+}
+
+// Timeline loading text
+.timeline-loading-text {
+  margin: 0;
+  opacity: 0.8;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+// Responsive design
+@include tablet-down {
+  .timeline {
+    .timeline-header {
+      padding: calc($gap * 0.75);
+
+      .timeline-controls {
+        .refresh-btn {
+          padding: calc($gap * 0.375) calc($gap * 0.75);
+          font-size: 13px;
+        }
+      }
+    }
+
+    .timeline-item {
+      padding: calc($gap * 0.75) 0;
+
+      .event-header {
+        margin-bottom: calc($gap * 0.375);
+      }
+
+      .event-content {
+        margin-bottom: calc($gap / 2);
+      }
+    }
+  }
+}
+
+@include mobile-down {
+  .timeline {
+    .timeline-header {
+      padding: calc($gap / 2);
+
+      .timeline-controls {
+        .refresh-btn {
+          padding: calc($gap / 4) calc($gap / 2);
+          font-size: 12px;
+        }
+      }
+    }
+
+    .timeline-item {
+      padding: calc($gap * 0.75) 0;
+
+      .event-header-container {
+        margin-bottom: calc($gap / 2);
+
+        // NoteHeader will adapt to container size automatically
+        // Use small size on mobile
+        .note-header {
+          // The NoteHeader component's container queries will handle this
+        }
+      }
+    }
+  }
+}
+
+/* Quote Box - styled exactly like normal notes */
+.quote-box {
+  margin: calc($gap * 0.75) 0;
+  padding: $gap 0 0 calc($gap * 1.5);
+
+  // No special styling - quoted notes look exactly like normal notes
+  .note-card {
+    // Keep all default note-card styling
+  }
+
+  // Max nesting depth: 7 levels
+  // After level 7, stop indenting to preserve readability
+  .quote-box .quote-box .quote-box .quote-box .quote-box .quote-box .quote-box {
+    padding-left: 0;
+  }
+}
+
+/* Quote container styling */
+.quoted-notes-container {
+  margin-top: $gap;
+}
+
+/* Max depth reached indicator */
+.quote-max-depth {
+  background: $color-2;
+  border: 1px dashed $color-3;
+  border-radius: 6px;
+  padding: calc($gap * 0.75);
+  margin: calc($gap / 2) 0;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+
+  &:hover {
+    background: color.adjust($color-2, $lightness: 5%);
+    border-color: $color-4;
+  }
+
+  .max-depth-content {
+    display: flex;
+    align-items: center;
+    gap: calc($gap / 2);
+    color: $color-5;
+
+    .depth-icon {
+      font-size: 19px;
+      opacity: 0.7;
+    }
+
+    .depth-text {
+      font-size: 14px;
+      font-weight: 500;
+      opacity: 0.8;
+    }
+
+    .depth-id {
+      font-size: 12px;
+      opacity: 0.6;
+      font-family: monospace;
+    }
+  }
+}
+
+/* Skeleton loader for quoted notes */
+.quote-skeleton {
+  background: $color-2;
+  border: 1px solid $color-3;
+  border-radius: 6px;
+  padding: $gap;
+  margin: calc($gap / 2) 0;
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+// Skeleton header (standalone)
+.skeleton-header {
+  display: flex;
+  align-items: center;
+  gap: calc($gap * 0.75);
+  margin-bottom: calc($gap * 0.75);
+}
+
+// Skeleton avatar (standalone)
+.skeleton-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: $color-3;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+// Skeleton text group (standalone)
+.skeleton-text-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: calc($gap / 2);
+}
+
+// Skeleton name (standalone)
+.skeleton-name {
+  width: 120px;
+  height: 14px;
+  background: $color-3;
+  border-radius: 4px;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+// Skeleton timestamp (standalone)
+.skeleton-timestamp {
+  width: 80px;
+  height: 12px;
+  background: $color-3;
+  border-radius: 4px;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+// Skeleton content (standalone)
+.skeleton-content {
+  display: flex;
+  flex-direction: column;
+  gap: calc($gap / 2);
+}
+
+// Skeleton text line (standalone)
+.skeleton-text-line {
+  width: 100%;
+  height: 12px;
+  background: $color-3;
+  border-radius: 4px;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+
+  &.short {
+    width: 60%;
+  }
+}
+
+// Skeleton line (standalone)
+.skeleton-line {
+  background: $color-3;
+  border-radius: 4px;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+/* Skeleton animations */
+@keyframes skeleton-shimmer {
+  0% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.6;
+  }
+}
+
+@keyframes skeleton-pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(0.98);
+  }
+}

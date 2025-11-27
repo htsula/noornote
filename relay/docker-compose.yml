@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  # Main strfry relay
+  strfry:
+    image: dockurr/strfry
+    container_name: noornote-relay
+    ports:
+      - "7777:7777"
+    volumes:
+      - ./strfry-db:/app/strfry-db
+      - ./strfry.conf:/etc/strfry.conf:ro
+    restart: unless-stopped
+    stop_grace_period: 2m
+    networks:
+      - noornote-relay-network
+
+  # Router for PROXY mode (syncs with public relays)
+  # This service is started only in proxy-mode.sh
+  strfry-router:
+    image: dockurr/strfry
+    container_name: noornote-relay-router
+    command: ["router", "/etc/strfry-router.conf"]
+    volumes:
+      - ./strfry-db:/app/strfry-db
+      - ./strfry.conf:/etc/strfry.conf:ro
+      - ./strfry-router.conf:/etc/strfry-router.conf:ro
+    restart: unless-stopped
+    depends_on:
+      - strfry
+    networks:
+      - noornote-relay-network
+    profiles:
+      - proxy  # Only starts when explicitly enabled
+
+networks:
+  noornote-relay-network:
+    driver: bridge

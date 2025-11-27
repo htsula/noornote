@@ -1,0 +1,80 @@
+/**
+ * LikesList Component Styles
+ * Horizontal scrollable list of reaction badges (SNV only)
+ */
+
+@use '../abstracts/variables' as *;
+@use '../abstracts/mixins' as *;
+
+.likes-list {
+  width: 100%;
+  margin-top: $gap;
+
+  &__scroll {
+    display: flex;
+    gap: calc($gap / 2);
+    overflow-x: auto;
+    padding-bottom: calc($gap / 4);
+
+    @include custom-scrollbar;
+
+    // Hide scrollbar on mobile (swipe instead)
+    @include mobile-down {
+      scrollbar-width: none;
+      &::-webkit-scrollbar {
+        display: none;
+      }
+    }
+  }
+
+  &__badge {
+    display: inline-flex;
+    align-items: center;
+    gap: calc($gap / 4);
+    padding: calc($gap / 4) calc($gap / 2);
+    background-color: rgba($color-6, 0.1);
+    border: 1px solid rgba($color-6, 0.2);
+    border-radius: $radius-full;
+    white-space: nowrap;
+    flex-shrink: 0;
+    cursor: pointer;
+    transition: all 0.2s ease;
+
+    // Interactive state (pink on hover)
+    &:hover {
+      background-color: rgba($color-4, 0.1);
+      border-color: rgba($color-4, 0.3);
+    }
+
+    // Active state (user has reacted with this emoji)
+    &--active {
+      background-color: rgba($color-4, 0.15);
+      border-color: $color-4;
+
+      .likes-list__count {
+        color: $color-4;
+      }
+
+      &:hover {
+        background-color: rgba($color-4, 0.2);
+      }
+    }
+
+    // Disabled state
+    &:disabled {
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+  }
+
+  &__emoji {
+    font-size: 16px;
+    line-height: 1;
+  }
+
+  &__count {
+    font-weight: $font-weight-semibold;
+    font-size: 14px;
+    color: $color-6;
+  }
+}

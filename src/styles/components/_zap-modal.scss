@@ -1,0 +1,88 @@
+/**
+ * ZapModal Component Styles
+ * Custom zap interface with amount and comment inputs
+ */
+
+@use '../abstracts/variables' as *;
+
+.zap-modal {
+  display: flex;
+  flex-direction: column;
+  gap: calc($gap * 1.5);
+
+  &__content {
+    display: flex;
+    flex-direction: column;
+    gap: calc($gap * 1.5);
+  }
+
+  &__field {
+    display: flex;
+    flex-direction: column;
+    gap: calc($gap / 2);
+  }
+
+  &__label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+
+  &__input {
+    width: 100%;
+    padding: $gap;
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+    color: var(--color-text-primary);
+    font-family: inherit;
+    font-size: 16px;
+    transition: border-color 0.2s ease;
+
+    &:focus {
+      outline: none;
+      border-color: var(--color-primary);
+    }
+
+    &::placeholder {
+      color: var(--color-text-tertiary);
+    }
+
+    // Remove spinner for number input
+    &[type="number"] {
+      -moz-appearance: textfield;
+
+      &::-webkit-outer-spin-button,
+      &::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+    }
+  }
+
+  &__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: $gap;
+    padding-top: calc($gap / 2);
+  }
+}
+
+// Mobile responsiveness
+@media (max-width: 768px) {
+  .zap-modal {
+    gap: $gap;
+
+    &__content {
+      gap: $gap;
+    }
+
+    &__actions {
+      flex-direction: column-reverse;
+
+      .btn {
+        width: 100%;
+      }
+    }
+  }
+}

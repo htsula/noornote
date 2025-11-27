@@ -1,0 +1,102 @@
+/**
+ * Noornote - Main Sass Entry Point
+ * Atomic Design Architecture - Modern @use syntax
+ */
+
+// 1. Abstracts - Variables, functions, mixins (load first)
+@use 'abstracts/variables' as *;
+@use 'abstracts/functions' as *;
+@use 'abstracts/mixins' as *;
+
+// 2. Base - Reset, typography, base elements
+@use 'base/fonts';
+@use 'base/reset';
+@use 'base/typography';
+@use 'base/base';
+
+// 3. Atoms - Smallest UI components
+@use 'atoms/pulsate';
+@use 'atoms/progress-bar';
+@use 'atoms/inputs';
+@use 'atoms/icons';
+@use 'atoms/labels';
+@use 'atoms/links';
+@use 'atoms/profile-pic';
+@use 'atoms/badges';
+
+// 3.5. Components - Individual UI components
+@use 'components/auth';
+@use 'components/login-view';
+@use 'components/note-ui';
+@use 'components/timeline';
+@use 'components/custom-dropdown';
+@use 'components/_system-logger';
+@use 'components/user-status';
+@use 'components/skeleton';
+@use 'components/single-note-view';
+@use 'components/profile-view';
+@use 'components/profile-edit-modal';
+@use 'components/profile-search';
+@use 'components/settings-view';
+@use 'components/mute-list-view';
+@use 'components/interaction-status-line';
+@use 'components/user-identity';
+@use 'components/sync-status-badge';
+@use 'components/article-preview';
+@use 'components/article-view';
+@use 'components/article-editor-view';
+@use 'components/article-timeline';
+@use 'components/modal';
+@use 'components/analytics-modal';
+@use 'components/qrcode-modal';
+@use 'components/raw-event-modal';
+@use 'components/report-modal';
+@use 'components/delete-note-modal';
+@use 'components/zap-modal';
+@use 'components/sync-confirmation-modal';
+@use 'components/zaps-list';
+@use 'components/likes-list';
+@use 'components/post-note-modal';
+@use 'components/reply-modal';
+@use 'components/mention-autocomplete';
+@use 'components/emoji-picker';
+@use 'components/switch';
+@use 'components/auth-required-modal';
+@use 'components/poll-creator';
+@use 'components/nip88-poll';
+@use 'components/toast';
+@use 'components/image-viewer';
+@use 'components/notifications';
+@use 'components/wallet-balance-display';
+@use 'components/url-navigation-modal';
+@use 'components/infinite-scroll';
+@use 'components/user-hover-card';
+@use 'components/mutuals';
+@use 'components/bookmark-cards';
+
+// 4. Molecules - Combinations of atoms
+@use 'molecules/buttons';
+@use 'molecules/forms';
+@use 'molecules/cards';
+@use 'molecules/navigation';
+@use 'molecules/media';
+@use 'molecules/messages';
+@use 'molecules/follow-dropdown';
+
+// 5. Organisms - Complex UI sections
+@use 'organisms/header';
+@use 'organisms/sidebar';
+@use 'organisms/note-header';
+@use 'organisms/note-menu';
+@use 'organisms/footer';
+
+// 6. Templates - Page-level layouts
+@use 'templates/main-layout';
+@use 'templates/profile-layout';
+
+// 7. Pages - Specific page overrides
+@use 'pages/home';
+@use 'pages/profile';
+
+// 8. Utilities - Helper classes
+@use 'abstracts/utilities';

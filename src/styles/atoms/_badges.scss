@@ -1,0 +1,11 @@
+/**
+ * Badges Atom
+ * Reusable badge components
+ */
+
+@use '../abstracts/variables' as *;
+
+.private-badge {
+  font-size: 12px;
+  opacity: 0.7;
+}

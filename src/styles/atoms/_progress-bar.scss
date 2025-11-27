@@ -1,0 +1,67 @@
+/**
+ * Progress Bar Atom
+ * Reusable loading progress bar as pseudo-element
+ *
+ * Usage:
+ * 1. Apply mixin to container: @include progress-bar-container();
+ * 2. Add class .progress-bar--loading to start
+ * 3. Set CSS variable --progress (0-100%)
+ * 4. Switch to .progress-bar--complete for fade-out
+ *
+ * Or use the ProgressBarHelper.ts for JavaScript control
+ */
+
+@use '../abstracts/variables' as *;
+
+// ============================================================================
+// MIXIN
+// ============================================================================
+
+/// Progress bar container mixin
+/// Adds ::after pseudo-element that acts as progress bar
+/// @param {Color} $color [$color-4] - Bar color
+/// @param {Number} $height [1px] - Bar height/thickness
+/// @param {Number} $transition-speed [0.3s] - Width transition speed
+/// @param {Number} $fade-delay [0.2s] - Delay before fade-out starts
+@mixin progress-bar-container(
+  $color: $color-4,
+  $height: 1px,
+  $transition-speed: 0.3s,
+  $fade-delay: 0.2s
+) {
+  position: relative;
+
+  &::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: $height;
+    width: 0;
+    background: $color;
+    transition: width $transition-speed ease-out;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  // Loading state - show and animate progress bar
+  &.progress-bar--loading::after {
+    opacity: 1;
+    width: var(--progress, 0%);
+  }
+
+  // Complete state - fade out
+  &.progress-bar--complete::after {
+    width: 100%;
+    opacity: 0;
+    transition: width $transition-speed ease-out, opacity 0.5s ease-out $fade-delay;
+  }
+}
+
+// ============================================================================
+// UTILITY CLASS (for elements that don't use mixin)
+// ============================================================================
+
+.progress-bar-container {
+  @include progress-bar-container();
+}
