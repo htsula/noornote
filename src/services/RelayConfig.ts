@@ -204,6 +204,25 @@ export class RelayConfig {
   }
 
   /**
+   * Get user-configured read relays (excludes aggregator relays)
+   * Used for relay filter dropdown in Timeline
+   */
+  public getUserReadRelays(): string[] {
+    const aggregators = new Set(this.getAggregatorRelays());
+    const readRelays = this.getRelaysByType('read')
+      .map(relay => relay.url)
+      .filter(url => !aggregators.has(url));
+
+    // Check if local relay is enabled
+    const localRelaySettings = this.loadLocalRelaySettings();
+    if (localRelaySettings.enabled && !readRelays.includes(localRelaySettings.url)) {
+      readRelays.push(localRelaySettings.url);
+    }
+
+    return readRelays;
+  }
+
+  /**
    * Get fallback following list when user has no follows
    */
   public getFallbackFollowing(): string[] {

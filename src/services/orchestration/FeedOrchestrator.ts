@@ -143,9 +143,10 @@ export class FeedOrchestrator extends Orchestrator {
 
       // ProfileView: Use subscription (persistent connection) instead of one-time fetch
       // Timeline: Use fetch (faster for multiple authors)
+      // Skip cache when filtering by specific relay (to get only events from that relay)
       const events = isProfileView
         ? await this.fetchViaSubscription(relays, filters)
-        : await this.transport.fetch(relays, filters);
+        : await this.transport.fetch(relays, filters, 5000, !!specificRelay);
 
       // Deduplicate events
       const uniqueEvents = Array.from(
@@ -261,9 +262,10 @@ export class FeedOrchestrator extends Orchestrator {
       }];
 
       // ProfileView: Use subscription, Timeline: Use fetch
+      // Skip cache when filtering by specific relay (to get only events from that relay)
       const events = isProfileView
         ? await this.fetchViaSubscription(relays, filters)
-        : await this.transport.fetch(relays, filters);
+        : await this.transport.fetch(relays, filters, 5000, !!specificRelay);
 
       // Deduplicate events
       const uniqueEvents = Array.from(

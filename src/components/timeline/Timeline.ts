@@ -169,15 +169,15 @@ export class Timeline extends View {
    * Setup custom dropdown for view selection
    */
   private setupViewDropdown(): void {
-    // Build dropdown options: Latest, Latest+Replies, then all read relays
+    // Build dropdown options: Latest, Latest+Replies, then user's relays (no aggregators)
     const baseOptions = [
       { value: 'latest', label: 'Latest' },
       { value: 'latest-replies', label: 'Latest + Replies' }
     ];
 
-    // Get read relays from RelayConfig
-    const readRelays = this.relayConfig.getReadRelays();
-    const relayOptions = readRelays.map(relayUrl => {
+    // Get user-configured read relays (excludes aggregator relays)
+    const userRelays = this.relayConfig.getUserReadRelays();
+    const relayOptions = userRelays.map(relayUrl => {
       // Extract domain from relay URL for label (remove wss:// or ws://)
       const label = relayUrl.replace(/^wss?:\/\//, '');
       return { value: `relay:${relayUrl}`, label };

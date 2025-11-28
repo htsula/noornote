@@ -6,7 +6,7 @@
  * Used by: OrchestrationsRouter exclusively (no direct Component access)
  */
 
-import NDK from '@nostr-dev-kit/ndk';
+import NDK, { NDKSubscriptionCacheUsage } from '@nostr-dev-kit/ndk';
 import NDKCacheDexie from '@nostr-dev-kit/ndk-cache-dexie';
 import type { NDKEvent, NDKFilter, NDKSubscription, NDKRelaySet } from '@nostr-dev-kit/ndk';
 import type { NostrEvent } from '@nostr-dev-kit/ndk';
@@ -190,7 +190,8 @@ export class NostrTransport {
   public async fetch(
     relays: string[],
     filters: NDKFilter[],
-    timeout: number = 5000
+    timeout: number = 5000,
+    skipCache: boolean = false
   ): Promise<NostrEvent[]> {
     try {
       await this.ensureConnected();
@@ -204,10 +205,11 @@ export class NostrTransport {
       }
 
       // Standard fetch using NDK (auto-dedupe, auto-verify)
+      // Use ONLY_RELAY when skipCache is true (for relay-specific filtering)
       const eventSet = await this.ndk.fetchEvents(filters, {
         relayUrls: relays,
-        closeOnEose: true
-        // Note: NDK handles timeout via EOSE internally
+        closeOnEose: true,
+        cacheUsage: skipCache ? NDKSubscriptionCacheUsage.ONLY_RELAY : NDKSubscriptionCacheUsage.CACHE_FIRST
       });
 
       // Convert Set<NDKEvent> to Array<NostrEvent>
