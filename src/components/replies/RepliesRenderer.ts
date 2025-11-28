@@ -10,6 +10,7 @@ import { LikesList } from '../ui/LikesList';
 import { ThreadOrchestrator } from '../../services/orchestration/ThreadOrchestrator';
 import { ReactionsOrchestrator } from '../../services/orchestration/ReactionsOrchestrator';
 import { UserProfileService } from '../../services/UserProfileService';
+import { AuthService } from '../../services/AuthService';
 import { fetchNostrEvents } from '../../helpers/fetchNostrEvents';
 import { RelayConfig } from '../../services/RelayConfig';
 import { SystemLogger } from '../system/SystemLogger';
@@ -270,7 +271,7 @@ export class RepliesRenderer {
    * Create a reply element with depth-based indentation
    */
   private createReplyElement(reply: NostrEvent, depth: number = 0): HTMLElement {
-    const isUserLoggedIn = this.authService.getCurrentUser() !== null;
+    const isUserLoggedIn = AuthService.getInstance().getCurrentUser() !== null;
 
     const noteElement = NoteUI.createNoteElement(reply, {
       collapsible: true,
