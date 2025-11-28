@@ -61,6 +61,7 @@ export class FeedOrchestrator extends Orchestrator {
   /** New notes polling */
   private pollingInterval: number = 60000; // 60 seconds
   private pollingIntervalId: number | null = null;
+  private pollingTimeoutId: number | null = null; // Track setTimeout for cancellation
   private pollingScheduled: boolean = false; // Track if polling is scheduled (before interval starts)
   private lastCheckedTimestamp: number = 0;
   private newNotesCallback: NewNotesCallback | null = null;
@@ -497,8 +498,9 @@ export class FeedOrchestrator extends Orchestrator {
       `Starting to look for new notes in ${delayMs / 1000}s${specificRelay ? ` from ${specificRelay}` : ''}`
     );
 
-    // Start polling after delay
-    setTimeout(() => {
+    // Start polling after delay (store timeout ID for cancellation)
+    this.pollingTimeoutId = window.setTimeout(() => {
+      this.pollingTimeoutId = null; // Clear reference after firing
       this.poll(); // First poll immediately after delay
       this.pollingIntervalId = window.setInterval(() => this.poll(), this.pollingInterval);
     }, delayMs);
@@ -508,17 +510,22 @@ export class FeedOrchestrator extends Orchestrator {
    * Check if polling is currently active or scheduled
    */
   public isPolling(): boolean {
-    return this.pollingScheduled || this.pollingIntervalId !== null;
+    return this.pollingScheduled || this.pollingTimeoutId !== null || this.pollingIntervalId !== null;
   }
 
   /**
    * Stop polling for new notes
    */
   public stopPolling(): void {
+    // Clear pending timeout (before interval starts)
+    if (this.pollingTimeoutId !== null) {
+      clearTimeout(this.pollingTimeoutId);
+      this.pollingTimeoutId = null;
+    }
+    // Clear running interval
     if (this.pollingIntervalId !== null) {
       clearInterval(this.pollingIntervalId);
       this.pollingIntervalId = null;
-      this.systemLogger.info('FeedOrchestrator', 'Polling stopped');
     }
     this.pollingScheduled = false;
   }

@@ -20,8 +20,8 @@
 
 ### Rust-Server Konzept
 
-Minimale Binary (~10MB) für alle Plattformen:
-- Eingebetteter Web-Server (axum/warp)
+Minimale Binary (~60MB inkl. Assets) für alle Plattformen:
+- Eingebetteter Web-Server (axum)
 - Bündelt Web-Assets (`npm run build` → `dist/`)
 - Öffnet Default-Browser auf `localhost:PORT`
 - Unzensierbar (keine Server-Infrastruktur, alles lokal)
@@ -140,10 +140,60 @@ if (platform.supportsNoorSigner) {
 - [x] File-Export: Browser-API (Blob + Download)
 - [x] File-Import: Browser-API (FileReader + File Input Dialog)
 
-### Phase 5: Rust-Server (separates Projekt)
-- [ ] Rust-Projekt erstellen
-- [ ] Web-Assets einbetten (rust-embed)
-- [ ] Cross-compile für alle Plattformen
+### Phase 5: Rust-Server ✅
+- [x] Rust-Projekt erstellen (noorserver)
+- [x] axum HTTP-Server + rust-embed für Assets
+- [x] CLI-Optionen: `--port`, `--no-browser`
+- [x] SPA-Fallback (unbekannte Routes → index.html)
+- [x] GitHub Actions CI/CD für alle Plattformen
+- [x] Automatische Releases bei Tag (`v*`)
+
+---
+
+## GitHub Repositories
+
+| Repo | Beschreibung |
+|------|--------------|
+| [77elements/noornote](https://github.com/77elements/noornote) | Hauptprojekt (Vanilla JS + Vite) |
+| [77elements/noorsigner](https://github.com/77elements/noorsigner) | Lokaler Signer (Tauri) |
+| [77elements/noorserver](https://github.com/77elements/noorserver) | Rust-Server für Browser-Distribution |
+
+---
+
+## Noorserver Details
+
+### Binaries (v0.1.2)
+
+| Binary | Plattform | Größe |
+|--------|-----------|-------|
+| `noorserver-linux-x64` | Linux x64 | 60.4 MB |
+| `noorserver-macos-arm64` | macOS ARM (M1/M2) | 60.6 MB |
+| `noorserver-macos-x64` | macOS Intel | 60.2 MB |
+| `noorserver-windows-x64.exe` | Windows x64 | 60.4 MB |
+
+### Nutzung
+
+```bash
+# Standard (Port 3000, öffnet Browser)
+./noorserver
+
+# Custom Port
+./noorserver --port 8080
+
+# Ohne Browser öffnen
+./noorserver --no-browser
+
+# Hilfe
+./noorserver --help
+```
+
+### CI/CD Workflow
+
+Bei jedem Git-Tag (`v*`) wird automatisch:
+1. noornote geklont und gebaut (`npm ci && npm run build`)
+2. `dist/` in noorserver kopiert
+3. Rust-Binary für alle 4 Plattformen kompiliert
+4. GitHub Release mit allen Binaries erstellt
 
 ---
 
@@ -151,3 +201,11 @@ if (platform.supportsNoorSigner) {
 
 - [ ] Librem 5: Gibt es Browser-Extensions? Falls nein → Tauri reaktivieren
 - [ ] NoorSigner als separates Projekt für andere Nostr-Apps?
+
+---
+
+## Nächste Schritte
+
+- [ ] Alle Plattformen durchtesten (Linux, Windows, macOS)
+- [ ] Font-Optimierung (aktuell 53MB Fonts → Subset)
+- [ ] README für noorserver Repo
