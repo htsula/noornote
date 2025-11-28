@@ -175,18 +175,31 @@ export class RepostManager extends BaseInteractionManager<RepostManagerConfig> {
       // If this is a repost (Kind 6), extract the original note being reposted
       const unwrappedEvent = await getRepostsOriginalEvent(originalEvent);
 
-      // Generate nevent reference with relay hints
-      const { encodeNevent } = await import('../../../helpers/encodeNevent');
       const writeRelays = await RelayConfig.getInstance().getWriteRelays();
+      let reference: string;
 
-      const neventReference = encodeNevent(
-        unwrappedEvent.id,
-        writeRelays,
-        unwrappedEvent.pubkey
-      );
+      // For long-form articles (kind 30023), use naddr encoding
+      if (unwrappedEvent.kind === 30023) {
+        const { encodeNaddr } = await import('../../../services/NostrToolsAdapter');
+        const dTag = unwrappedEvent.tags.find(t => t[0] === 'd')?.[1] || '';
+        reference = 'nostr:' + encodeNaddr({
+          kind: unwrappedEvent.kind,
+          pubkey: unwrappedEvent.pubkey,
+          identifier: dTag,
+          relays: writeRelays.slice(0, 2) // Include up to 2 relay hints
+        });
+      } else {
+        // For regular notes, use nevent encoding
+        const { encodeNevent } = await import('../../../helpers/encodeNevent');
+        reference = encodeNevent(
+          unwrappedEvent.id,
+          writeRelays,
+          unwrappedEvent.pubkey
+        );
+      }
 
       // Open post modal with pre-filled content
-      PostNoteModal.getInstance().show(neventReference);
+      PostNoteModal.getInstance().show(reference);
     } catch (error) {
       console.error('❌ Failed to open quoted repost editor:', error);
       ToastService.show('Failed to open editor', 'error');

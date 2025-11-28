@@ -85,6 +85,23 @@ export class QuotedNoteRenderer {
           }
         }
 
+        // Route long-form articles (kind 30023) to ArticlePreviewRenderer
+        if (result.event.kind === 30023) {
+          const { encodeNaddr } = await import('./NostrToolsAdapter');
+          const dTag = result.event.tags.find(t => t[0] === 'd')?.[1] || '';
+          const naddrRef = 'nostr:' + encodeNaddr({
+            kind: result.event.kind,
+            pubkey: result.event.pubkey,
+            identifier: dTag,
+            relays: []
+          });
+          // Create container for article preview and replace skeleton
+          const container = document.createElement('div');
+          skeleton.replaceWith(container);
+          this.articleRenderer.renderArticlePreview(naddrRef, container);
+          return;
+        }
+
         const quoteBox = this.createQuoteBox(result.event, enableCollapsible);
         skeleton.replaceWith(quoteBox);
       } else {
