@@ -17,6 +17,12 @@ export interface ZapModalOptions {
   authorPubkey: string;
   /** Callback when zap is successfully sent */
   onZapSent?: (amount: number) => void;
+  /**
+   * LONG-FORM ARTICLES ONLY: Event ID for addressable events
+   * When zapping an article, noteId is the addressable identifier (kind:pubkey:d-tag)
+   * and articleEventId is the actual event ID (hex). Both are needed for proper tagging.
+   */
+  articleEventId?: string;
 }
 
 export class ZapModal {
@@ -200,7 +206,8 @@ export class ZapModal {
         this.currentOptions.noteId,
         this.currentOptions.authorPubkey,
         amount,
-        comment
+        comment,
+        this.currentOptions.articleEventId
       );
 
       // Hide loading state

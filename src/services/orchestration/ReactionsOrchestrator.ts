@@ -58,6 +58,13 @@ export class ReactionsOrchestrator extends Orchestrator {
   /** Author pubkey cache for Hollywood-style logging */
   private authorPubkeyCache: Map<string, string> = new Map();
 
+  /**
+   * Event ID cache for long-form articles (addressable events)
+   * Long-form articles use addressable identifier (kind:pubkey:d-tag) but some clients
+   * reference them by event ID. We need to search BOTH to find all interactions.
+   */
+  private articleEventIdCache: Map<string, string> = new Map();
+
   /** Live reactions polling tracking */
   private reactionIntervals: Map<string, number> = new Map(); // noteId → intervalId
   private lastReactionFetch: Map<string, number> = new Map(); // noteId → timestamp
@@ -77,21 +84,36 @@ export class ReactionsOrchestrator extends Orchestrator {
   }
 
   /**
+   * Check if noteId is a long-form article (addressable event)
+   * Format: "kind:pubkey:d-tag" (e.g., "30023:abc123...:my-article")
+   * Normal notes are just hex event IDs without colons
+   */
+  private isLongFormArticle(noteId: string): boolean {
+    return noteId.includes(':');
+  }
+
+  /**
    * Get stats for a note (with caching)
-   * @param noteId - The note ID to fetch stats for
+   * @param noteId - The note ID to fetch stats for (addressable identifier or event ID)
    * @param authorPubkey - Optional author pubkey for Hollywood-style logging
+   * @param eventId - Optional event ID for long-form articles (to search both #a and #e)
    *
    * IMPLEMENTATION: Fetches DetailedStats and extracts counts
    * Single source of truth - no duplicate fetch logic
    */
-  public async getStats(noteId: string, authorPubkey?: string): Promise<InteractionStats> {
+  public async getStats(noteId: string, authorPubkey?: string, eventId?: string): Promise<InteractionStats> {
     // Cache author pubkey for logging
     if (authorPubkey) {
       this.authorPubkeyCache.set(noteId, authorPubkey);
     }
 
+    // For long-form articles: cache event ID to search both #a and #e tags
+    if (eventId && this.isLongFormArticle(noteId)) {
+      this.articleEventIdCache.set(noteId, eventId);
+    }
+
     // Fetch detailed stats (uses cache if available)
-    const detailedStats = await this.getDetailedStats(noteId);
+    const detailedStats = await this.getDetailedStats(noteId, eventId);
 
     // Extract counts from detailed stats
     return {
@@ -128,8 +150,15 @@ export class ReactionsOrchestrator extends Orchestrator {
   /**
    * Get detailed stats for a note (with full event arrays)
    * Used by Analytics Modal to show detailed breakdowns
+   * @param noteId - The note ID (addressable identifier or event ID)
+   * @param eventId - Optional event ID for long-form articles (to search both #a and #e)
    */
-  public async getDetailedStats(noteId: string): Promise<DetailedStats> {
+  public async getDetailedStats(noteId: string, eventId?: string): Promise<DetailedStats> {
+    // For long-form articles: cache event ID if provided
+    if (eventId && this.isLongFormArticle(noteId)) {
+      this.articleEventIdCache.set(noteId, eventId);
+    }
+
     // Check cache first
     const cached = this.detailedStatsCache.get(noteId);
     if (cached && Date.now() - cached.lastUpdated < this.cacheDuration) {
@@ -143,8 +172,13 @@ export class ReactionsOrchestrator extends Orchestrator {
       return await this.fetchingDetailedStats.get(noteId)!;
     }
 
+    // For long-form articles: get cached eventId if not provided
+    const articleEventId = this.isLongFormArticle(noteId)
+      ? (eventId || this.articleEventIdCache.get(noteId))
+      : undefined;
+
     // Start new fetch
-    const fetchPromise = this.fetchDetailedStatsFromRelays(noteId);
+    const fetchPromise = this.fetchDetailedStatsFromRelays(noteId, articleEventId);
     this.fetchingDetailedStats.set(noteId, fetchPromise);
 
     try {
@@ -180,8 +214,10 @@ export class ReactionsOrchestrator extends Orchestrator {
   /**
    * Fetch detailed stats from relays (all types in parallel, full events)
    * SINGLE SOURCE OF TRUTH - both ISL and Analytics Modal use this
+   * @param noteId - The note ID (addressable identifier or event ID)
+   * @param articleEventId - For long-form articles only: event ID to search both #a and #e
    */
-  private async fetchDetailedStatsFromRelays(noteId: string): Promise<DetailedStats> {
+  private async fetchDetailedStatsFromRelays(noteId: string, articleEventId?: string): Promise<DetailedStats> {
     // Increment counter and determine context
     this.fetchCounter++;
     const isOriginalNote = this.fetchCounter === 1;
@@ -226,10 +262,10 @@ export class ReactionsOrchestrator extends Orchestrator {
 
     // Fetch all interaction types in parallel
     const [reactions, reposts, replies, zaps] = await Promise.all([
-      this.fetchReactionEvents(noteId),
-      this.fetchRepostEvents(noteId),
-      this.fetchReplyEvents(noteId),
-      this.fetchZapEvents(noteId)
+      this.fetchReactionEvents(noteId, articleEventId),
+      this.fetchRepostEvents(noteId, articleEventId),
+      this.fetchReplyEvents(noteId, articleEventId),
+      this.fetchZapEvents(noteId, articleEventId)
     ]);
 
     detailedStats.reactionEvents = reactions;
@@ -280,20 +316,31 @@ export class ReactionsOrchestrator extends Orchestrator {
   /**
    * Fetch reaction events (kind 7) - returns full events for Analytics Modal
    * Per NIP-25: ALL content values are valid (emojis, +, -, custom emoji)
-   * Supports both e-tags (normal notes) and a-tags (addressable events)
+   *
+   * NORMAL NOTES: Search #e tag only (unchanged behavior)
+   * LONG-FORM ARTICLES: Search BOTH #a and #e tags (some clients use event ID)
    */
-  private async fetchReactionEvents(noteId: string): Promise<NostrEvent[]> {
+  private async fetchReactionEvents(noteId: string, articleEventId?: string): Promise<NostrEvent[]> {
     return new Promise(async (resolve) => {
       const reactions: NostrEvent[] = [];
       const seenAuthors = new Set<string>();
       const relays = this.transport.getReadRelays();
 
-      // Determine if this is an addressable event (a-tag) or regular event (e-tag)
-      const isAddressable = noteId.includes(':'); // Format: "kind:pubkey:d-tag"
-      const filters: NostrFilter[] = [{
-        kinds: [7],
-        ...(isAddressable ? { '#a': [noteId] } : { '#e': [noteId] })
-      }];
+      const isArticle = this.isLongFormArticle(noteId);
+
+      // Build filters based on note type
+      const filters: NostrFilter[] = [];
+
+      if (isArticle) {
+        // LONG-FORM ARTICLE: Search both #a (addressable) and #e (event ID)
+        filters.push({ kinds: [7], '#a': [noteId] });
+        if (articleEventId) {
+          filters.push({ kinds: [7], '#e': [articleEventId] });
+        }
+      } else {
+        // NORMAL NOTE: Search #e tag only (unchanged)
+        filters.push({ kinds: [7], '#e': [noteId] });
+      }
 
       const sub = await this.transport.subscribe(relays, filters, {
         onEvent: (event: NostrEvent) => {
@@ -317,9 +364,11 @@ export class ReactionsOrchestrator extends Orchestrator {
    * Fetch repost events - returns separate arrays for regular/quoted
    * Regular reposts: kind:6 with #e or #a tag
    * Quoted reposts: kind:1 with #q tag
-   * Supports both e-tags (normal notes) and a-tags (addressable events)
+   *
+   * NORMAL NOTES: Search #e and #q tags only (unchanged behavior)
+   * LONG-FORM ARTICLES: Search BOTH #a and #e tags, #q uses event ID
    */
-  private async fetchRepostEvents(noteId: string): Promise<{ regular: NostrEvent[]; quoted: NostrEvent[] }> {
+  private async fetchRepostEvents(noteId: string, articleEventId?: string): Promise<{ regular: NostrEvent[]; quoted: NostrEvent[] }> {
     return new Promise(async (resolve) => {
       const regular: NostrEvent[] = [];
       const quoted: NostrEvent[] = [];
@@ -327,23 +376,25 @@ export class ReactionsOrchestrator extends Orchestrator {
       const quotedAuthors = new Set<string>();
       const relays = this.transport.getReadRelays();
 
-      // Determine if this is an addressable event (a-tag) or regular event (e-tag)
-      const isAddressable = noteId.includes(':'); // Format: "kind:pubkey:d-tag"
+      const isArticle = this.isLongFormArticle(noteId);
 
-      // Filter for regular reposts (kind:6)
-      const regularFilter: NostrFilter = {
-        kinds: [6],
-        ...(isAddressable ? { '#a': [noteId] } : { '#e': [noteId] })
-      };
+      const filters: NostrFilter[] = [];
 
-      // Filter for quoted reposts (kind:1 with 'q' tag)
-      // Note: Quoted reposts typically use q-tags for event IDs, not a-tags
-      const quotedFilter: NostrFilter = {
-        kinds: [1],
-        '#q': [noteId]
-      };
+      if (isArticle) {
+        // LONG-FORM ARTICLE: Search both #a and #e for regular reposts
+        filters.push({ kinds: [6], '#a': [noteId] });
+        if (articleEventId) {
+          filters.push({ kinds: [6], '#e': [articleEventId] });
+          // Quoted reposts use #q tag with event ID
+          filters.push({ kinds: [1], '#q': [articleEventId] });
+        }
+      } else {
+        // NORMAL NOTE: Search #e and #q tags only (unchanged)
+        filters.push({ kinds: [6], '#e': [noteId] });
+        filters.push({ kinds: [1], '#q': [noteId] });
+      }
 
-      const sub = await this.transport.subscribe(relays, [regularFilter, quotedFilter], {
+      const sub = await this.transport.subscribe(relays, filters, {
         onEvent: (event: NostrEvent) => {
           if (event.kind === 6) {
             // Regular repost
@@ -372,28 +423,49 @@ export class ReactionsOrchestrator extends Orchestrator {
    * Fetch reply events (kind 1) - returns full events for Analytics Modal
    * COUNTS ALL REPLIES including nested (replies to replies)
    * A reply references our note with ANY e-tag (root, reply, or mention) or a-tag
-   * Supports both e-tags (normal notes) and a-tags (addressable events)
+   *
+   * NORMAL NOTES: Search #e tag only (unchanged behavior)
+   * LONG-FORM ARTICLES: Search BOTH #a and #e tags
    */
-  private async fetchReplyEvents(noteId: string): Promise<NostrEvent[]> {
+  private async fetchReplyEvents(noteId: string, articleEventId?: string): Promise<NostrEvent[]> {
     return new Promise(async (resolve) => {
       const replies: NostrEvent[] = [];
       const seenReplyIds = new Set<string>(); // Deduplicate by event ID
       const relays = this.transport.getReadRelays();
 
-      // Determine if this is an addressable event (a-tag) or regular event (e-tag)
-      const isAddressable = noteId.includes(':'); // Format: "kind:pubkey:d-tag"
+      const isArticle = this.isLongFormArticle(noteId);
 
-      const filters: NostrFilter[] = [{
-        kinds: [1],
-        ...(isAddressable ? { '#a': [noteId] } : { '#e': [noteId] })
-      }];
+      // Build filters based on note type
+      const filters: NostrFilter[] = [];
+
+      if (isArticle) {
+        // LONG-FORM ARTICLE: Search both #a and #e
+        filters.push({ kinds: [1], '#a': [noteId] });
+        if (articleEventId) {
+          filters.push({ kinds: [1], '#e': [articleEventId] });
+        }
+      } else {
+        // NORMAL NOTE: Search #e tag only (unchanged)
+        filters.push({ kinds: [1], '#e': [noteId] });
+      }
 
       const sub = await this.transport.subscribe(relays, filters, {
         onEvent: (event: NostrEvent) => {
           // ANY kind:1 that references our note via tag is a reply (direct or nested)
           if (!seenReplyIds.has(event.id)) {
-            const tagType = isAddressable ? 'a' : 'e';
-            const referencesNote = event.tags.some(tag => tag[0] === tagType && tag[1] === noteId);
+            // Verify the event actually references our note
+            let referencesNote = false;
+
+            if (isArticle) {
+              // LONG-FORM ARTICLE: Check both #a and #e tags
+              referencesNote = event.tags.some(tag =>
+                (tag[0] === 'a' && tag[1] === noteId) ||
+                (articleEventId && tag[0] === 'e' && tag[1] === articleEventId)
+              );
+            } else {
+              // NORMAL NOTE: Check #e tag only (unchanged)
+              referencesNote = event.tags.some(tag => tag[0] === 'e' && tag[1] === noteId);
+            }
 
             if (referencesNote) {
               replies.push(event);
@@ -412,21 +484,31 @@ export class ReactionsOrchestrator extends Orchestrator {
 
   /**
    * Fetch zap events (kind 9735) - returns full events for Analytics Modal
-   * Supports both e-tags (normal notes) and a-tags (addressable events)
+   *
+   * NORMAL NOTES: Search #e tag only (unchanged behavior)
+   * LONG-FORM ARTICLES: Search BOTH #a and #e tags
    */
-  private async fetchZapEvents(noteId: string): Promise<NostrEvent[]> {
+  private async fetchZapEvents(noteId: string, articleEventId?: string): Promise<NostrEvent[]> {
     return new Promise(async (resolve) => {
       const zaps: NostrEvent[] = [];
       const seenZapIds = new Set<string>(); // Deduplicate by event ID
       const relays = this.transport.getReadRelays();
 
-      // Determine if this is an addressable event (a-tag) or regular event (e-tag)
-      const isAddressable = noteId.includes(':'); // Format: "kind:pubkey:d-tag"
+      const isArticle = this.isLongFormArticle(noteId);
 
-      const filters: NostrFilter[] = [{
-        kinds: [9735],
-        ...(isAddressable ? { '#a': [noteId] } : { '#e': [noteId] })
-      }];
+      // Build filters based on note type
+      const filters: NostrFilter[] = [];
+
+      if (isArticle) {
+        // LONG-FORM ARTICLE: Search both #a and #e
+        filters.push({ kinds: [9735], '#a': [noteId] });
+        if (articleEventId) {
+          filters.push({ kinds: [9735], '#e': [articleEventId] });
+        }
+      } else {
+        // NORMAL NOTE: Search #e tag only (unchanged)
+        filters.push({ kinds: [9735], '#e': [noteId] });
+      }
 
       const sub = await this.transport.subscribe(relays, filters, {
         onEvent: (event: NostrEvent) => {
@@ -514,6 +596,8 @@ export class ReactionsOrchestrator extends Orchestrator {
 
   /**
    * Poll for new reactions since last fetch
+   * NORMAL NOTES: Poll #e tag only (unchanged)
+   * LONG-FORM ARTICLES: Poll both #a and #e tags
    */
   private async pollReactions(noteId: string, callback: (stats: InteractionStats) => void): Promise<void> {
     const lastFetch = this.lastReactionFetch.get(noteId);
@@ -525,13 +609,22 @@ export class ReactionsOrchestrator extends Orchestrator {
     const now = Math.floor(Date.now() / 1000);
     const relays = this.transport.getReadRelays();
 
-    // Fetch new reactions (kind:7) since last poll
-    const filters: NostrFilter[] = [{
-      kinds: [7],
-      '#e': [noteId],
-      since: lastFetch,
-      until: now
-    }];
+    const isArticle = this.isLongFormArticle(noteId);
+    const articleEventId = isArticle ? this.articleEventIdCache.get(noteId) : undefined;
+
+    // Build filters based on note type
+    const filters: NostrFilter[] = [];
+
+    if (isArticle) {
+      // LONG-FORM ARTICLE: Poll both #a and #e
+      filters.push({ kinds: [7], '#a': [noteId], since: lastFetch, until: now });
+      if (articleEventId) {
+        filters.push({ kinds: [7], '#e': [articleEventId], since: lastFetch, until: now });
+      }
+    } else {
+      // NORMAL NOTE: Poll #e only (unchanged)
+      filters.push({ kinds: [7], '#e': [noteId], since: lastFetch, until: now });
+    }
 
     try {
       const newReactions = await this.transport.fetch(relays, filters, 5000);
@@ -628,6 +721,7 @@ export class ReactionsOrchestrator extends Orchestrator {
 
     this.detailedStatsCache.clear();
     this.fetchingDetailedStats.clear();
+    this.articleEventIdCache.clear();
     super.destroy();
     this.systemLogger.info('ReactionsOrchestrator', 'Destroyed');
   }

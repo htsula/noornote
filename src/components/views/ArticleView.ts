@@ -100,6 +100,9 @@ export class ArticleView {
     const addressableId = getAddressableIdentifier(event);
     const noteId = addressableId || event.id; // Fallback to event.id if extraction fails
 
+    // LONG-FORM ARTICLE: Store event.id to search both #a and #e tags for interactions
+    const articleEventId = event.id;
+
     // Mount ISL directly after article-body
     const articleBody = this.container.querySelector('.article-body');
     if (articleBody) {
@@ -109,6 +112,7 @@ export class ArticleView {
         originalEvent: event, // Pass original event for reposting
         fetchStats: true,
         isLoggedIn: true,
+        articleEventId, // LONG-FORM ARTICLE: Pass event ID for proper zap tagging
         onAnalytics: () => {
           const analyticsModal = AnalyticsModal.getInstance();
           analyticsModal.show({
@@ -119,20 +123,25 @@ export class ArticleView {
       });
       articleBody.insertAdjacentElement('afterend', isl.getElement());
 
-      // Load zaps and likes list
-      this.loadZapsList(noteId, event.pubkey, articleBody.parentElement as HTMLElement);
+      // Load zaps and likes list (pass articleEventId for long-form article dual-tag search)
+      this.loadZapsList(noteId, event.pubkey, articleBody.parentElement as HTMLElement, articleEventId);
     }
 
-    // Load and render replies
-    this.loadReplies(noteId, event.pubkey);
+    // Load and render replies (pass articleEventId for long-form article dual-tag search)
+    this.loadReplies(noteId, event.pubkey, articleEventId);
   }
 
   /**
    * Load and render zaps/likes lists above ISL
+   * @param noteId - Addressable identifier (kind:pubkey:d-tag)
+   * @param authorPubkey - Author's pubkey
+   * @param articleContainer - Container element
+   * @param articleEventId - Event ID for long-form articles (to search both #a and #e tags)
    */
-  private async loadZapsList(noteId: string, authorPubkey: string, articleContainer: HTMLElement): Promise<void> {
+  private async loadZapsList(noteId: string, authorPubkey: string, articleContainer: HTMLElement, articleEventId?: string): Promise<void> {
     try {
-      const stats = await this.reactionsOrchestrator.getDetailedStats(noteId);
+      // LONG-FORM ARTICLE: Pass eventId to search both #a and #e tags
+      const stats = await this.reactionsOrchestrator.getDetailedStats(noteId, articleEventId);
 
       // Find ISL container
       const islContainer = articleContainer.querySelector('.isl');
@@ -163,8 +172,11 @@ export class ArticleView {
 
   /**
    * Load and render replies for the article
+   * @param noteId - Addressable identifier (kind:pubkey:d-tag)
+   * @param noteAuthor - Author's pubkey
+   * @param articleEventId - Event ID for long-form articles (to search both #a and #e tags)
    */
-  private async loadReplies(noteId: string, noteAuthor: string): Promise<void> {
+  private async loadReplies(noteId: string, noteAuthor: string, articleEventId?: string): Promise<void> {
     const repliesContainer = this.container.querySelector('.article-replies-container');
     if (!repliesContainer) return;
 
@@ -175,6 +187,7 @@ export class ArticleView {
       noteAuthor,
       updateISL: false, // Don't update ISL for articles (addressable identifier mismatch)
       onLoadZapsList: (replyId, replyAuthor, noteElement) => {
+        // Replies are normal notes (not addressable), no articleEventId needed
         this.loadZapsListForReply(replyId, replyAuthor, noteElement);
       }
     });
@@ -183,10 +196,11 @@ export class ArticleView {
   }
 
   /**
-   * Load zaps list for a reply
+   * Load zaps list for a reply (normal note, not addressable)
    */
   private async loadZapsListForReply(noteId: string, authorPubkey: string, noteElement: HTMLElement): Promise<void> {
     try {
+      // Replies are normal notes - no articleEventId needed
       const stats = await this.reactionsOrchestrator.getDetailedStats(noteId);
 
       const islContainer = noteElement.querySelector('.isl');

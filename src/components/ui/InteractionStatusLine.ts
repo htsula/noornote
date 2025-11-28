@@ -32,6 +32,12 @@ export interface ISLConfig {
   onLike?: () => void;
   onZap?: () => void;
   onAnalytics?: () => void;
+  /**
+   * LONG-FORM ARTICLES ONLY: Event ID for addressable events
+   * When zapping an article, noteId is the addressable identifier (kind:pubkey:d-tag)
+   * and articleEventId is the actual event ID (hex). Both are needed for proper tagging.
+   */
+  articleEventId?: string;
 }
 
 export class InteractionStatusLine {
@@ -90,6 +96,7 @@ export class InteractionStatusLine {
       this.zapManager = new ZapManager({
         noteId: this.config.noteId,
         authorPubkey: this.config.authorPubkey,
+        articleEventId: this.config.articleEventId, // LONG-FORM ARTICLES ONLY
         onStatsUpdate: (amount: number) => {
           this.updateStats({ zaps: this.stats.zaps + amount });
         },

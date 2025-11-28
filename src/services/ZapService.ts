@@ -23,6 +23,12 @@ export interface ZapRequest {
   authorPubkey: string;
   amount: number; // in sats
   comment?: string;
+  /**
+   * LONG-FORM ARTICLES ONLY: Event ID for addressable events
+   * When zapping an article, noteId is the addressable identifier (kind:pubkey:d-tag)
+   * and articleEventId is the actual event ID (hex). Both are needed for proper tagging.
+   */
+  articleEventId?: string;
 }
 
 export interface ZapResult {
@@ -62,9 +68,21 @@ export class ZapService {
   }
 
   /**
-   * Send quick zap with default amount and comment from settings
+   * Check if noteId is a long-form article (addressable event)
+   * Format: "kind:pubkey:d-tag" (e.g., "30023:abc123...:my-article")
+   * Normal notes are just hex event IDs without colons
    */
-  public async sendQuickZap(noteId: string, authorPubkey: string): Promise<ZapResult> {
+  private isLongFormArticle(noteId: string): boolean {
+    return noteId.includes(':');
+  }
+
+  /**
+   * Send quick zap with default amount and comment from settings
+   * @param noteId - Note ID or addressable identifier for articles
+   * @param authorPubkey - Author's pubkey
+   * @param articleEventId - LONG-FORM ARTICLES ONLY: Event ID for proper tagging
+   */
+  public async sendQuickZap(noteId: string, authorPubkey: string, articleEventId?: string): Promise<ZapResult> {
     // Check NWC connection
     if (!this.nwcService.isConnected()) {
       ToastService.show('Please connect Lightning Wallet', 'error');
@@ -78,18 +96,25 @@ export class ZapService {
       noteId,
       authorPubkey,
       amount: defaults.amount,
-      comment: defaults.comment
+      comment: defaults.comment,
+      articleEventId
     });
   }
 
   /**
    * Send custom zap with specified amount and comment
+   * @param noteId - Note ID or addressable identifier for articles
+   * @param authorPubkey - Author's pubkey
+   * @param amount - Amount in sats
+   * @param comment - Optional comment
+   * @param articleEventId - LONG-FORM ARTICLES ONLY: Event ID for proper tagging
    */
   public async sendCustomZap(
     noteId: string,
     authorPubkey: string,
     amount: number,
-    comment?: string
+    comment?: string,
+    articleEventId?: string
   ): Promise<ZapResult> {
     // Check NWC connection
     if (!this.nwcService.isConnected()) {
@@ -101,7 +126,8 @@ export class ZapService {
       noteId,
       authorPubkey,
       amount,
-      comment
+      comment,
+      articleEventId
     });
   }
 
@@ -389,6 +415,9 @@ export class ZapService {
 
   /**
    * Create zap request event (kind 9734)
+   *
+   * NORMAL NOTES: Uses #e tag with event ID
+   * LONG-FORM ARTICLES: Uses #a tag with addressable identifier AND #e tag with event ID
    */
   private async createZapRequestEvent(request: ZapRequest): Promise<NostrEvent | null> {
     try {
@@ -401,15 +430,32 @@ export class ZapService {
       // Get relays for zap receipt publication
       const relays = this.relayConfig.getWriteRelays();
 
+      // Build tags based on note type
+      const tags: string[][] = [
+        ['p', request.authorPubkey], // Recipient pubkey
+        ['amount', (request.amount * 1000).toString()], // Amount in millisats
+        ...relays.map(relay => ['relays', relay]) // Relays for zap receipt
+      ];
+
+      const isArticle = this.isLongFormArticle(request.noteId);
+
+      if (isArticle) {
+        // LONG-FORM ARTICLE: Use #a tag with addressable identifier
+        tags.push(['a', request.noteId]);
+        // Also add #e tag with event ID if provided (for better discoverability)
+        if (request.articleEventId) {
+          tags.push(['e', request.articleEventId]);
+        }
+        this.systemLogger.info('ZapService', `Creating zap request for article: #a=${request.noteId}, #e=${request.articleEventId || 'none'}`);
+      } else {
+        // NORMAL NOTE: Use #e tag with event ID
+        tags.push(['e', request.noteId]);
+      }
+
       const unsignedEvent = {
         kind: 9734,
         created_at: Math.floor(Date.now() / 1000),
-        tags: [
-          ['p', request.authorPubkey], // Recipient pubkey
-          ['e', request.noteId], // Note being zapped
-          ['amount', (request.amount * 1000).toString()], // Amount in millisats
-          ...relays.map(relay => ['relays', relay]) // Relays for zap receipt
-        ],
+        tags,
         content: request.comment || '',
         pubkey: currentUser.pubkey
       };

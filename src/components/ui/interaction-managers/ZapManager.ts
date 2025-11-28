@@ -19,6 +19,12 @@ export interface ZapManagerConfig {
   authorPubkey: string;
   onStatsUpdate?: (zaps: number) => void;
   onCustomZap?: () => void;
+  /**
+   * LONG-FORM ARTICLES ONLY: Event ID for addressable events
+   * When zapping an article, noteId is the addressable identifier (kind:pubkey:d-tag)
+   * and articleEventId is the actual event ID (hex). Both are needed for proper tagging.
+   */
+  articleEventId?: string;
 }
 
 export class ZapManager {
@@ -160,7 +166,8 @@ export class ZapManager {
 
       const result = await this.zapService.sendQuickZap(
         this.config.noteId,
-        this.config.authorPubkey
+        this.config.authorPubkey,
+        this.config.articleEventId
       );
 
       this.updateButtonLoading(false);
@@ -196,6 +203,7 @@ export class ZapManager {
     const zapModal = new ZapModal({
       noteId: this.config.noteId,
       authorPubkey: this.config.authorPubkey,
+      articleEventId: this.config.articleEventId,
       onZapSent: (amount: number) => {
         this.hasZapped = true;
         this.zappedAmount = this.zapService.getUserZapAmount(this.config.noteId);
