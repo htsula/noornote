@@ -65,8 +65,6 @@ export class TimelineEventHandler {
    * Handle timeline view change
    */
   public async handleViewChange(selectedView: string): Promise<void> {
-    console.log(`Timeline view changed to: ${selectedView}`);
-
     // Check if this is a relay-specific filter
     if (selectedView.startsWith('relay:')) {
       const relayUrl = selectedView.substring(6); // Remove 'relay:' prefix
@@ -84,9 +82,20 @@ export class TimelineEventHandler {
       this.appState.setState('timeline', { selectedRelay: null });
     }
 
-    // Reload timeline with new filter setting
-    console.log(`Reloading timeline with includeReplies: ${this.stateManager.getIncludeReplies()}, selectedRelay: ${this.stateManager.getSelectedRelay()}`);
-    await this.handleRefresh();
+    // View change requires full reload (not just prepending cached events)
+    // Stop polling and clear cache from previous filter
+    this.feedOrchestrator.stopPolling();
+    this.feedOrchestrator.getPolledEvents(); // Clear cache
+
+    // Reset state and reload
+    this.stateManager.reset();
+    this.element.querySelectorAll('.note-card').forEach(card => card.remove());
+    await this.onInitializeTimeline();
+
+    // Hide refresh button
+    if (this.refreshButton) {
+      this.refreshButton.hide();
+    }
   }
 
   /**
@@ -163,8 +172,6 @@ export class TimelineEventHandler {
         this.stateManager.setHasMore(false);
         return;
       }
-
-      console.log(`📅 Loading events older than: ${new Date(oldestEvent.created_at * 1000).toISOString()}`);
 
       // Use FeedOrchestrator for load more
       const result = await this.feedOrchestrator.loadMore({
