@@ -27,9 +27,18 @@ export interface PostOptions {
   contentWarning?: boolean;
   /** Poll data (NIP-88) - makes this a Kind 1068 event */
   pollData?: PollData;
-  /** Quoted event data (NIP-18) - adds q tags for quoted reposts */
+  /** Quoted event data (NIP-18) - adds q tags for quoted reposts (NORMAL NOTES) */
   quotedEvent?: {
     eventId: string;
+    authorPubkey: string;
+    relayHint?: string;
+  };
+  /**
+   * LONG-FORM ARTICLES ONLY: Quoted article data
+   * Uses a-tag with addressable identifier instead of q-tag
+   */
+  quotedArticle?: {
+    addressableId: string;  // Format: "kind:pubkey:d-tag"
     authorPubkey: string;
     relayHint?: string;
   };
@@ -72,7 +81,7 @@ export class PostService {
    * @returns Promise<boolean> - Success status
    */
   public async createPost(options: PostOptions): Promise<boolean> {
-    const { content, relays, contentWarning, pollData, quotedEvent } = options;
+    const { content, relays, contentWarning, pollData, quotedEvent, quotedArticle } = options;
 
     // Validate authentication
     const currentUser = this.authService.getCurrentUser();
@@ -114,6 +123,7 @@ export class PostService {
       });
 
       // Add quoted event tags if this is a quoted repost (NIP-18)
+      // NORMAL NOTES: Use q-tag with event ID
       if (quotedEvent) {
         const qTag = ['q', quotedEvent.eventId];
         if (quotedEvent.relayHint) {
@@ -125,6 +135,20 @@ export class PostService {
         // Add p-tag for quoted author if not already mentioned
         if (!mentionedPubkeys.has(quotedEvent.authorPubkey)) {
           tags.push(['p', quotedEvent.authorPubkey]);
+        }
+      }
+
+      // LONG-FORM ARTICLES: Use a-tag with addressable identifier instead of q-tag
+      if (quotedArticle) {
+        const aTag = ['a', quotedArticle.addressableId];
+        if (quotedArticle.relayHint) {
+          aTag.push(quotedArticle.relayHint);
+        }
+        tags.push(aTag);
+
+        // Add p-tag for quoted author if not already mentioned
+        if (!mentionedPubkeys.has(quotedArticle.authorPubkey)) {
+          tags.push(['p', quotedArticle.authorPubkey]);
         }
       }
 

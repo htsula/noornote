@@ -527,6 +527,9 @@ export class PostNoteModal {
       const quotedRefs = extractQuotedReferences(this.content);
       let quotedEvent: { eventId: string; authorPubkey: string; relayHint?: string } | undefined;
 
+      // Also track quoted articles (naddr) separately
+      let quotedArticle: { addressableId: string; authorPubkey: string; relayHint?: string } | undefined;
+
       if (quotedRefs.length > 0) {
         const ref = quotedRefs[0];
         const cleanRef = ref.id.replace(/^nostr:/, '');
@@ -535,11 +538,21 @@ export class PostNoteModal {
           const decoded = decodeNip19(cleanRef);
 
           if (decoded.type === 'nevent') {
+            // NORMAL NOTE: Use q-tag with event ID
             const neventData = decoded.data as { id: string; author?: string; relays?: string[] };
             quotedEvent = {
               eventId: neventData.id,
               authorPubkey: neventData.author || '',
               relayHint: neventData.relays?.[0]
+            };
+          } else if (decoded.type === 'naddr') {
+            // LONG-FORM ARTICLE: Use a-tag with addressable identifier
+            const naddrData = decoded.data as { kind: number; pubkey: string; identifier: string; relays?: string[] };
+            const addressableId = `${naddrData.kind}:${naddrData.pubkey}:${naddrData.identifier}`;
+            quotedArticle = {
+              addressableId,
+              authorPubkey: naddrData.pubkey,
+              relayHint: naddrData.relays?.[0]
             };
           }
         } catch (error) {
@@ -552,13 +565,18 @@ export class PostNoteModal {
         relays: Array.from(this.selectedRelays),
         contentWarning: this.isNSFW,
         pollData: this.pollData || undefined,
-        quotedEvent
+        quotedEvent,
+        quotedArticle // LONG-FORM ARTICLES: Use a-tag instead of q-tag
       });
 
       if (success) {
         // If this was a quoted repost, update stats for the quoted note
         if (quotedEvent && quotedEvent.eventId) {
           StatsUpdateService.getInstance().clearCacheOnly(quotedEvent.eventId);
+        }
+        // If this was a quoted article, update stats for the article
+        if (quotedArticle && quotedArticle.addressableId) {
+          StatsUpdateService.getInstance().clearCacheOnly(quotedArticle.addressableId);
         }
 
         this.draftContent = '';
