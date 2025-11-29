@@ -20,23 +20,6 @@
   - Seller MP
   - Discovery
 
-4. **OS-Erkennung & Plattform-Konfiguration**: Plattformspezifische Vorkonfigurationen für macOS, Linux und Windows implementieren.
-  - **Platforms:** macOS, Linux, Windows
-  - **Scope:**
-    - Verzeichnispfade für File Storage (aktuell: `~/.noornote/` für macOS/Linux, `%USERPROFILE%/.noornote/` für Windows)
-    - Platform-specific default settings
-    - Path resolution per OS
-    - Keyboard shortcuts (Cmd vs Ctrl)
-    - Window behavior (minimize to tray, etc.)
-  - **Location:** TBD - ggf. `src/services/PlatformService.ts` oder `src/config/platform.ts`
-  - **Current:** MuteFileStorage.ts nutzt bereits `homeDir()` von Tauri, aber keine zentrale OS-Detection
-  - **Goal:** Zentrale Plattform-Erkennung mit OS-spezifischen Defaults für alle File-Storage-Services
-  - **Benefits:**
-    - Konsistente Pfadverwaltung across all platforms
-    - Einheitliche OS-Detection für alle Services
-    - Bessere User Experience per Platform
-
-
 ### Bugs (Require Fixing)
 
 (keine offenen Bugs)
