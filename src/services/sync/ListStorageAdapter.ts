@@ -22,6 +22,11 @@ export interface FetchFromRelaysResult<T> {
    * In this case, local private items should be preserved during sync
    */
   relayContentWasEmpty: boolean;
+  /**
+   * True if private items could not be decrypted (e.g., hardware signer limitation)
+   * In this case, local private items should be preserved during sync
+   */
+  decryptionFailed?: boolean;
 }
 
 export interface ListStorageAdapter<T> {
