@@ -465,6 +465,9 @@ export class NWCService {
    * CRITICAL: Never delete stored connection automatically - only on explicit disconnect()
    */
   private async restoreConnection(): Promise<void> {
+    const MAX_RETRIES = 3;
+    const RETRY_DELAY = 2000; // 2 seconds between retries
+
     try {
       const stored = await KeychainStorage.loadNWC();
       if (stored) {
@@ -474,8 +477,20 @@ export class NWCService {
         const connection = this.parseConnectionString(stored);
         this.connection = connection;
 
-        // Test connection (but don't block on failure)
-        const isValid = await this.testConnection(connection);
+        // Test connection with retries
+        let isValid = false;
+        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+          isValid = await this.testConnection(connection);
+
+          if (isValid) {
+            break;
+          }
+
+          // Wait before retry (except on last attempt)
+          if (attempt < MAX_RETRIES) {
+            await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+          }
+        }
 
         if (isValid) {
           this.state = 'connected';
@@ -484,10 +499,10 @@ export class NWCService {
           // Dispatch event to notify UI
           window.dispatchEvent(new CustomEvent('nwc-connection-restored'));
         } else {
-          // Connection test failed, but KEEP stored connection
+          // Connection test failed after all retries, but KEEP stored connection
           // User must explicitly disconnect to remove it
           this.state = 'error';
-          this.systemLogger.warn('NWCService', 'Failed to auto-reconnect (relay offline?), but connection kept. Use disconnect() to remove.');
+          this.systemLogger.warn('NWCService', 'Failed to auto-reconnect after 3 attempts (relay offline?), but connection kept.');
         }
       }
     } catch (error) {
