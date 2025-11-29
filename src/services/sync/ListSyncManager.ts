@@ -56,10 +56,13 @@ export class ListSyncManager<T> {
     const fetchResult = await this.adapter.fetchFromRelays();
     const relayItems = fetchResult.items;
     const relayContentWasEmpty = fetchResult.relayContentWasEmpty;
+    const decryptionFailed = fetchResult.decryptionFailed || false;
     const browserItems = this.adapter.getBrowserItems();
 
-    // Calculate diff (pass relayContentWasEmpty to handle private item edge case)
-    const diff = this.calculateDiff(browserItems, relayItems, relayContentWasEmpty);
+    // Calculate diff - preserve private items if content was empty OR decryption failed
+    // (e.g., hardware signer can't decrypt, but private items still exist on relay)
+    const preservePrivateItems = relayContentWasEmpty || decryptionFailed;
+    const diff = this.calculateDiff(browserItems, relayItems, preservePrivateItems);
 
     // Determine if confirmation is needed
     // Browser has more items (removed.length > 0) → needs confirmation
@@ -69,7 +72,7 @@ export class ListSyncManager<T> {
       requiresConfirmation,
       diff,
       relayItems,
-      relayContentWasEmpty
+      relayContentWasEmpty: preservePrivateItems // Use combined flag for downstream handling
     };
   }
 

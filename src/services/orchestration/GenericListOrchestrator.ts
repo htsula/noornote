@@ -256,10 +256,19 @@ export class GenericListOrchestrator<T extends BaseListItem> extends Orchestrato
       if (!nip46Manager?.isAvailable()) {
         throw new Error('NIP-46 remote signer not available');
       }
+      // Add timeout for NIP-46 RPC operations (remote signer may not respond)
+      const encryptWithTimeout = <R>(fn: () => Promise<R>, timeoutMs: number = 15000): Promise<R> => {
+        return Promise.race([
+          fn(),
+          new Promise<R>((_, reject) =>
+            setTimeout(() => reject(new Error('NIP-46 encrypt timeout')), timeoutMs)
+          )
+        ]);
+      };
       try {
-        return await nip46Manager.nip44Encrypt(plaintext, pubkey);
+        return await encryptWithTimeout(() => nip46Manager.nip44Encrypt(plaintext, pubkey));
       } catch (nip44Error) {
-        return await nip46Manager.nip04Encrypt(plaintext, pubkey);
+        return await encryptWithTimeout(() => nip46Manager.nip04Encrypt(plaintext, pubkey));
       }
     } else if (authMethod === 'extension') {
       try {
@@ -327,13 +336,19 @@ export class GenericListOrchestrator<T extends BaseListItem> extends Orchestrato
 
       // Extract private items from encrypted content
       let privateItems: T[] = [];
+      let decryptionFailed = false;
       if (!relayContentWasEmpty) {
         try {
           privateItems = await this.decryptPrivateItems(event, pubkey);
           // Mark as private
           privateItems.forEach(item => { item.isPrivate = true; });
+          // Check if decryption returned empty despite content existing (e.g., hardware signer can't decrypt)
+          if (privateItems.length === 0) {
+            decryptionFailed = true;
+          }
         } catch (error) {
           this.systemLogger.error(this.name, `Could not decrypt private items: ${error}`);
+          decryptionFailed = true;
         }
       }
 
@@ -344,7 +359,8 @@ export class GenericListOrchestrator<T extends BaseListItem> extends Orchestrato
 
       return {
         items: Array.from(itemMap.values()),
-        relayContentWasEmpty
+        relayContentWasEmpty,
+        decryptionFailed
       };
     } catch (error) {
       this.systemLogger.error(this.name, `Failed to fetch from relays: ${error}`);
@@ -384,10 +400,19 @@ export class GenericListOrchestrator<T extends BaseListItem> extends Orchestrato
         if (!nip46Manager?.isAvailable()) {
           throw new Error('NIP-46 remote signer not available');
         }
+        // Add timeout for NIP-46 RPC operations (remote signer may not respond)
+        const decryptWithTimeout = <R>(fn: () => Promise<R>, timeoutMs: number = 10000): Promise<R> => {
+          return Promise.race([
+            fn(),
+            new Promise<R>((_, reject) =>
+              setTimeout(() => reject(new Error('NIP-46 decrypt timeout')), timeoutMs)
+            )
+          ]);
+        };
         try {
-          plaintext = await nip46Manager.nip44Decrypt(event.content, event.pubkey);
+          plaintext = await decryptWithTimeout(() => nip46Manager.nip44Decrypt(event.content, event.pubkey));
         } catch {
-          plaintext = await nip46Manager.nip04Decrypt(event.content, event.pubkey);
+          plaintext = await decryptWithTimeout(() => nip46Manager.nip04Decrypt(event.content, event.pubkey));
         }
       } else if (authMethod === 'extension') {
         if (window.nostr?.nip44?.decrypt) {
