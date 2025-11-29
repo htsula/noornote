@@ -2,18 +2,13 @@
 
 ### Features (Pending Implementation)
 
-1. **Connectivity Manager**: Watches general internet connection and relay health status
-  - **Location:** `src/services/RelayHealthMonitor.ts`
-  - **Implementation:** Must check independently whether internet connection exists or NN is connected to all of the configured relays.
-  - **Issue:** App doesn't behave well when not connected: too many timeout logs in csl, no error messages anywhere. App just tries to connect endlessly.
-
-2. **Legal/Support Static Page**: Implement static page with legal information, contact form, and support resources.
+1. **Legal/Support Static Page**: Implement static page with legal information, contact form, and support resources.
   - **Content:** Impressum, Datenschutz (DSGVO compliance), voluntary error reporting contact form
   - **Location:** TBD - likely `/legal` or `/about` route
   - **Implementation:** Static component accessible from Settings or Footer
   - **Requirements:** Privacy-first approach, opt-in contact form, no telemetry
 
-3. Plug-in System:
+2. Plug-in System:
   - On-boarding
   - Bookmarks
   - Freelancer MP
