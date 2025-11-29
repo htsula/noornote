@@ -40,6 +40,7 @@ export class ArticleNotificationService {
   private relayConfig: RelayConfig;
   private eventBus: EventBus;
   private pollInterval: ReturnType<typeof setInterval> | null = null;
+  private isPollingStarted = false;
 
   private constructor() {
     this.transport = NostrTransport.getInstance();
@@ -116,7 +117,9 @@ export class ArticleNotificationService {
    * Start polling for new articles
    */
   public startPolling(): void {
-    if (this.pollInterval) return;
+    // Guard against race condition: check flag first
+    if (this.isPollingStarted) return;
+    this.isPollingStarted = true;
 
     // Initial check
     this.checkForNewArticles();
@@ -131,6 +134,7 @@ export class ArticleNotificationService {
    * Stop polling
    */
   public stopPolling(): void {
+    this.isPollingStarted = false;
     if (this.pollInterval) {
       clearInterval(this.pollInterval);
       this.pollInterval = null;
