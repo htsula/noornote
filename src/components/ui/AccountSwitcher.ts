@@ -1,15 +1,14 @@
 /**
  * Account Switcher Component
  * Shows current user with dropdown for switching between stored accounts.
- * Supports both local accounts (nsec/extension) and NoorSigner accounts.
+ * Supports: NoorSigner (local daemon) and Bunker (remote signer)
  */
 
 import { UserProfileService, UserProfile } from '../../services/UserProfileService';
 import { AuthService } from '../../services/AuthService';
-import { AccountStorageService, type StoredAccount } from '../../services/AccountStorageService';
+import { AccountStorageService } from '../../services/AccountStorageService';
 import { KeySignerClient, type KeySignerAccount } from '../../services/KeySignerClient';
 import { KeySignerPasswordModal } from '../modals/KeySignerPasswordModal';
-import { EventBus } from '../../services/EventBus';
 
 export interface AccountSwitcherOptions {
   npub: string;
@@ -33,7 +32,6 @@ export class AccountSwitcher {
   private authService: AuthService;
   private accountStorage: AccountStorageService;
   private keySignerClient: KeySignerClient;
-  private eventBus: EventBus;
   private options: AccountSwitcherOptions;
   private profile: UserProfile | null = null;
   private unsubscribeProfile?: () => void;
@@ -46,7 +44,6 @@ export class AccountSwitcher {
     this.authService = AuthService.getInstance();
     this.accountStorage = AccountStorageService.getInstance();
     this.keySignerClient = KeySignerClient.getInstance();
-    this.eventBus = EventBus.getInstance();
     this.options = options;
     this.element = this.createElement();
     this.loadProfile();
@@ -193,6 +190,7 @@ export class AccountSwitcher {
 
     // Fetch accounts based on auth method
     if (authMethod === 'key-signer') {
+      // NoorSigner: get accounts from daemon
       try {
         const result = await this.keySignerClient.listAccounts();
         this.keySignerAccounts = result.accounts;
@@ -205,17 +203,19 @@ export class AccountSwitcher {
         // Load profiles for all accounts
         await this.loadAccountProfiles(accounts);
       } catch (error) {
-        console.error('[AccountSwitcher] Failed to list KeySigner accounts:', error);
+        console.error('[AccountSwitcher] Failed to list NoorSigner accounts:', error);
       }
-    } else {
-      // Use local account storage for nsec/extension accounts
+    } else if (authMethod === 'nip46') {
+      // Bunker: get accounts from local storage
       const stored = this.accountStorage.getAccounts();
-      accounts = stored.map(acc => ({
-        pubkey: acc.pubkey,
-        npub: acc.npub,
-        displayName: acc.displayName,
-        authMethod: acc.authMethod
-      }));
+      accounts = stored
+        .filter(acc => acc.authMethod === 'nip46')
+        .map(acc => ({
+          pubkey: acc.pubkey,
+          npub: acc.npub,
+          displayName: acc.displayName,
+          authMethod: 'nip46'
+        }));
     }
 
     // Build dropdown content
@@ -233,7 +233,7 @@ export class AccountSwitcher {
 
       for (const account of accounts) {
         const isActive = account.pubkey === currentPubkey;
-        const item = this.createAccountItem(account, isActive, authMethod === 'key-signer');
+        const item = this.createAccountItem(account, isActive);
         accountsList.appendChild(item);
       }
 
@@ -245,19 +245,17 @@ export class AccountSwitcher {
     const actionsSection = document.createElement('div');
     actionsSection.className = 'account-switcher__section account-switcher__actions';
 
-    // Add account button (only for non-KeySigner or if KeySigner supports it)
-    if (authMethod !== 'key-signer') {
-      const addBtn = document.createElement('button');
-      addBtn.className = 'account-switcher__action';
-      addBtn.innerHTML = `<span class="account-switcher__action-icon">+</span> Add account`;
-      addBtn.addEventListener('click', () => this.handleAddAccount());
-      actionsSection.appendChild(addBtn);
+    // Add account button - always shown
+    const addBtn = document.createElement('button');
+    addBtn.className = 'account-switcher__action';
+    addBtn.innerHTML = `<span class="account-switcher__action-icon">+</span> Add account`;
+    addBtn.addEventListener('click', () => this.handleAddAccount());
+    actionsSection.appendChild(addBtn);
 
-      // Divider
-      const divider = document.createElement('div');
-      divider.className = 'account-switcher__divider';
-      actionsSection.appendChild(divider);
-    }
+    // Divider
+    const divider = document.createElement('div');
+    divider.className = 'account-switcher__divider';
+    actionsSection.appendChild(divider);
 
     // Logout current
     const logoutBtn = document.createElement('button');
@@ -303,7 +301,7 @@ export class AccountSwitcher {
   /**
    * Create account item element
    */
-  private createAccountItem(account: DisplayAccount, isActive: boolean, isKeySigner: boolean): HTMLElement {
+  private createAccountItem(account: DisplayAccount, isActive: boolean): HTMLElement {
     const item = document.createElement('button');
     item.className = `account-switcher__account${isActive ? ' account-switcher__account--active' : ''}`;
 
@@ -316,10 +314,10 @@ export class AccountSwitcher {
 
     if (!isActive) {
       item.addEventListener('click', () => {
-        if (isKeySigner) {
+        if (account.authMethod === 'key-signer') {
           this.handleKeySignerSwitch(account);
         } else {
-          this.handleSwitch(account.pubkey);
+          this.handleBunkerSwitch(account);
         }
       });
     }
@@ -328,7 +326,7 @@ export class AccountSwitcher {
   }
 
   /**
-   * Handle KeySigner account switch (requires password)
+   * Handle NoorSigner account switch (requires password)
    */
   private handleKeySignerSwitch(account: DisplayAccount): void {
     this.closeDropdown();
@@ -338,7 +336,6 @@ export class AccountSwitcher {
       displayName: account.displayName,
       onSuccess: async () => {
         // NoorSigner has switched accounts - now re-authenticate to update AuthService
-        // This will get the new pubkey from daemon and emit user:login
         await this.authService.authenticateWithKeySigner();
       }
     });
@@ -347,14 +344,14 @@ export class AccountSwitcher {
   }
 
   /**
-   * Handle local account switch
+   * Handle Bunker account switch
    */
-  private async handleSwitch(pubkey: string): Promise<void> {
+  private async handleBunkerSwitch(account: DisplayAccount): Promise<void> {
     this.closeDropdown();
 
-    const result = await this.authService.switchAccount(pubkey);
+    const result = await this.authService.switchAccount(account.pubkey);
     if (!result.success) {
-      console.error('[AccountSwitcher] Switch failed:', result.error);
+      console.error('[AccountSwitcher] Bunker switch failed:', result.error);
     }
   }
 

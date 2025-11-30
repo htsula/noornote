@@ -40,6 +40,28 @@ interface SwitchAccountResponse {
   error?: string;
 }
 
+interface AddAccountResponse {
+  id: string;
+  success?: boolean;
+  pubkey?: string;
+  npub?: string;
+  error?: string;
+}
+
+interface RemoveAccountResponse {
+  id: string;
+  success?: boolean;
+  error?: string;
+}
+
+interface ActiveAccountResponse {
+  id: string;
+  pubkey?: string;
+  npub?: string;
+  is_unlocked?: boolean;
+  error?: string;
+}
+
 export class KeySignerClient {
   private static instance: KeySignerClient | null = null;
   private requestId = 0;
@@ -545,6 +567,124 @@ export class KeySignerClient {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error('[KeySigner] switchAccount error:', errorMessage);
       // Re-throw to preserve the original error message (e.g., "invalid password")
+      throw new Error(errorMessage);
+    }
+  }
+
+  /**
+   * Add a new account to NoorSigner
+   */
+  public async addAccount(
+    nsec: string,
+    password: string,
+    setActive = false
+  ): Promise<{ pubkey: string; npub: string }> {
+    if (!PlatformService.getInstance().isTauri) {
+      throw new Error('KeySigner is only available in Tauri desktop app');
+    }
+
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      const request = {
+        id: `req-${++this.requestId}`,
+        method: 'add_account',
+        nsec,
+        password,
+        set_active: setActive,
+      };
+
+      const responseStr = (await invoke('key_signer_request', {
+        request: JSON.stringify(request),
+      })) as string;
+      const response: AddAccountResponse = JSON.parse(responseStr);
+
+      if (response.error) {
+        throw new Error(response.error);
+      }
+
+      if (!response.success) {
+        throw new Error('Failed to add account');
+      }
+
+      return {
+        pubkey: response.pubkey || '',
+        npub: response.npub || '',
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(errorMessage);
+    }
+  }
+
+  /**
+   * Remove an account from NoorSigner
+   * Note: Cannot remove the currently active account
+   */
+  public async removeAccount(pubkey: string, password: string): Promise<boolean> {
+    if (!PlatformService.getInstance().isTauri) {
+      throw new Error('KeySigner is only available in Tauri desktop app');
+    }
+
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      const request = {
+        id: `req-${++this.requestId}`,
+        method: 'remove_account',
+        pubkey,
+        password,
+      };
+
+      const responseStr = (await invoke('key_signer_request', {
+        request: JSON.stringify(request),
+      })) as string;
+      const response: RemoveAccountResponse = JSON.parse(responseStr);
+
+      if (response.error) {
+        throw new Error(response.error);
+      }
+
+      return response.success || false;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(errorMessage);
+    }
+  }
+
+  /**
+   * Get the currently active account info
+   */
+  public async getActiveAccount(): Promise<{
+    pubkey: string;
+    npub: string;
+    isUnlocked: boolean;
+  }> {
+    if (!PlatformService.getInstance().isTauri) {
+      throw new Error('KeySigner is only available in Tauri desktop app');
+    }
+
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      const request = {
+        id: `req-${++this.requestId}`,
+        method: 'get_active_account',
+      };
+
+      const responseStr = (await invoke('key_signer_request', {
+        request: JSON.stringify(request),
+      })) as string;
+      const response: ActiveAccountResponse = JSON.parse(responseStr);
+
+      if (response.error) {
+        throw new Error(response.error);
+      }
+
+      return {
+        pubkey: response.pubkey || '',
+        npub: response.npub || '',
+        isUnlocked: response.is_unlocked || false,
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       throw new Error(errorMessage);
     }
   }
