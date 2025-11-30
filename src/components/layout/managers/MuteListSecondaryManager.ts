@@ -51,6 +51,11 @@ export class MuteListSecondaryManager extends BaseListSecondaryManager<string, M
     this.muteOrch = MuteOrchestrator.getInstance();
     this.userProfileService = UserProfileService.getInstance();
     this.router = Router.getInstance();
+
+    // Additional user:login handler for mutedThreads cache
+    this.eventBus.on('user:login', () => {
+      this.mutedThreads = [];
+    });
   }
 
   /**

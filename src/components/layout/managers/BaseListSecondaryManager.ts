@@ -109,8 +109,13 @@ export abstract class BaseListSecondaryManager<TItem, TWithProfile> {
       this.switchToSystemLogsTab();
     });
 
+    // On user switch, clear cached data and refresh if active
     this.eventBus.on('user:login', () => {
-      this.switchToSystemLogsTab();
+      this.allItemsWithProfiles = [];
+      this.currentOffset = 0;
+      this.hasMore = true;
+      this.isLoading = false;
+      this.refreshListIfActive();
     });
   }
 

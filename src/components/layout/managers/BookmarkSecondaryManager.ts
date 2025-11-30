@@ -82,6 +82,13 @@ export class BookmarkSecondaryManager {
       this.currentFolderId = '';
       this.bookmarksCache.clear();
     });
+
+    // On user switch, clear cache and refresh if active
+    this.eventBus.on('user:login', () => {
+      this.currentFolderId = '';
+      this.bookmarksCache.clear();
+      this.refreshIfActive();
+    });
   }
 
   private refreshIfActive(): void {

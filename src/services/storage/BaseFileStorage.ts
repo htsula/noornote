@@ -2,7 +2,8 @@
  * BaseFileStorage
  * Abstract base class for file-based storage using Tauri FS API
  *
- * Provides common functionality for storing data in ~/.noornote/ directory:
+ * Provides common functionality for storing data in ~/.noornote/{npub}/ directory:
+ * - Per-user file paths (each user has their own directory)
  * - Tauri environment detection
  * - Dynamic Tauri API imports
  * - Directory creation
@@ -14,6 +15,7 @@
 
 import { SystemLogger } from '../../components/system/SystemLogger';
 import { PlatformService } from '../PlatformService';
+import { AuthService } from '../AuthService';
 
 // Tauri APIs (dynamically imported to support browser builds)
 let tauriHomeDir: typeof import('@tauri-apps/api/path').homeDir | null = null;
@@ -52,9 +54,40 @@ export abstract class BaseFileStorage<T extends BaseFileData> {
   protected systemLogger: SystemLogger;
   protected filePath: string | null = null;
   protected fileInitialized: boolean = false;
+  protected currentUserNpub: string | null = null;
 
   constructor() {
     this.systemLogger = SystemLogger.getInstance();
+  }
+
+  /**
+   * Get current user's npub for per-user file paths
+   */
+  protected getCurrentUserNpub(): string | null {
+    try {
+      const authService = AuthService.getInstance();
+      const user = authService.getCurrentUser();
+      return user?.npub || null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Check if user context changed and needs reinitialization
+   */
+  protected userContextChanged(): boolean {
+    const currentNpub = this.getCurrentUserNpub();
+    return currentNpub !== this.currentUserNpub;
+  }
+
+  /**
+   * Reset initialization state (called when user changes)
+   */
+  protected resetInitialization(): void {
+    this.filePath = null;
+    this.fileInitialized = false;
+    this.currentUserNpub = null;
   }
 
   /**
@@ -87,8 +120,15 @@ export abstract class BaseFileStorage<T extends BaseFileData> {
 
   /**
    * Initialize file path (must be called before any file operations)
+   * Uses per-user directory: ~/.noornote/{npub}/filename.json
    */
   public async initialize(): Promise<void> {
+    // Check if user changed - if so, reinitialize
+    if (this.fileInitialized && this.userContextChanged()) {
+      this.systemLogger.info(this.getLoggerName(), 'User context changed, reinitializing...');
+      this.resetInitialization();
+    }
+
     if (this.fileInitialized) return;
 
     if (!platform.isTauri) {
@@ -99,22 +139,30 @@ export abstract class BaseFileStorage<T extends BaseFileData> {
       throw new Error('Tauri path API not loaded');
     }
 
+    // Get current user's npub for per-user directory
+    const userNpub = this.getCurrentUserNpub();
+    if (!userNpub) {
+      throw new Error(`${this.getLoggerName()} requires logged-in user`);
+    }
+
     try {
       const homePath = await tauriHomeDir();
-      const noornoteDir = `${homePath}/.noornote`;
+      const noornoteBaseDir = `${homePath}/.noornote`;
+      const userDir = `${noornoteBaseDir}/${userNpub}`;
 
-      // Create ~/.noornote directory if it doesn't exist
       if (!tauriExists) {
         throw new Error('Tauri fs API not loaded');
       }
 
-      const dirExists = await tauriExists(noornoteDir);
+      // Create ~/.noornote/{npub} directory if it doesn't exist
+      const dirExists = await tauriExists(userDir);
       if (!dirExists) {
-        await tauriMkdir(noornoteDir, { recursive: true });
-        this.systemLogger.info(this.getLoggerName(), `Created directory: ${noornoteDir}`);
+        await tauriMkdir(userDir, { recursive: true });
+        this.systemLogger.info(this.getLoggerName(), `Created user directory: ${userDir}`);
       }
 
-      this.filePath = `${noornoteDir}/${this.getFileName()}`;
+      this.filePath = `${userDir}/${this.getFileName()}`;
+      this.currentUserNpub = userNpub;
       this.fileInitialized = true;
 
       this.systemLogger.info(this.getLoggerName(), `Initialized: ${this.filePath}`);
@@ -154,7 +202,8 @@ export abstract class BaseFileStorage<T extends BaseFileData> {
    * Read data from file
    */
   public async read(): Promise<T> {
-    if (!this.fileInitialized) {
+    // Reinitialize if user changed or not initialized
+    if (!this.fileInitialized || this.userContextChanged()) {
       await this.initialize();
     }
 
@@ -182,7 +231,8 @@ export abstract class BaseFileStorage<T extends BaseFileData> {
    * Write data to file
    */
   public async write(data: T): Promise<void> {
-    if (!this.fileInitialized) {
+    // Reinitialize if user changed or not initialized
+    if (!this.fileInitialized || this.userContextChanged()) {
       await this.initialize();
     }
 
