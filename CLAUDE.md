@@ -34,11 +34,9 @@
     - Feature erst abhaken wenn VOLLSTÄNDIG umgesetzt
     - Fertige Features: Todo-Datei nach `docs/features/` verschieben
     - Verweise auf Detail-Dateien aktuell halten
-9. And last but not least: DON'T GUESS! DON'T GUESS! DON'T GUESS! DON'T GUESS! DON'T GUESS! DON'T GUESS! DON'T GUESS! DON'T GUESS!
-
-⚠️ DON'T GUESS! DON'T GUESS! DON'T GUESS! DON'T GUESS! DON'T GUESS! ⚠️
-
-KNOW! ANALYZE. FIND OUT. LEARN. KNOW!
+9. And last but not least: 
+   ⚠️ DON'T GUESS! DON'T GUESS! DON'T GUESS! DON'T GUESS! DON'T GUESS! DON'T GUESS! DON'T GUESS! DON'T GUESS!
+      KNOW! ANALYZE. FIND OUT. LEARN. KNOW! ⚠️
 
 **⚠️ BROWSER COMPATIBILITY:** NO `require()` in any browser-executed code! Use ES6 imports only. `require()` only works in Node.js.
 

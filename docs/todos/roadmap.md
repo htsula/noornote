@@ -8,21 +8,23 @@ Priorisierte Reihenfolge aller Todos.
 
 **Datei:** `noorsigner-multi-account.md` (Phase 4)
 
-**Status:** 🟡 TEILWEISE FERTIG
+**Status:** ✅ FERTIG (nur noch Testen)
 
 **Erledigt:**
 - ✅ `switchAccount()` in KeySignerClient
-- ✅ Passwort-Modal für Account-Switch
+- ✅ `listAccounts()` in KeySignerClient
+- ✅ `addAccount()` in KeySignerClient
+- ✅ `removeAccount()` in KeySignerClient
+- ✅ `getActiveAccount()` in KeySignerClient
+- ✅ Passwort-Modal für Account-Switch (KeySignerPasswordModal)
 - ✅ Per-user file storage (`~/.noornote/{npub}/`)
 - ✅ Cache-Clearing bei user:login Events
+- ✅ AccountSwitcher Component (komplett implementiert)
+- ✅ AccountStorageService (komplett implementiert)
+- ✅ NoorSigner Daemon: alle IPC-Methoden vorhanden
+- ✅ "+ Add Account" Flow in AuthComponent (Titel + Flag-Handling)
 
-**Offen:**
-- ❌ `listAccounts()`, `addAccount()`, `removeAccount()`, `getActiveAccount()` in KeySignerClient
-- ❌ AccountSwitcher Component (Dropdown mit allen Accounts, ersetzt UserStatus)
-- ❌ "+ Add Account" Flow in AuthComponent
-- ❌ AccountStorageService (Account-Metadaten cachen)
-
-**Aufwand verbleibend:** ~3-4h
+**Aufwand verbleibend:** Testen
 
 ---
 
@@ -163,7 +165,7 @@ Priorisierte Reihenfolge aller Todos.
 
 | # | Feature | Aufwand | Status |
 |---|---------|---------|--------|
-| 1 | Multi-User Integration | ~3-4h verbleibend | 🟡 Teilweise |
+| 1 | Multi-User Integration | Testen | ✅ Fertig |
 | 2 | Mutual Check (Phase 1-4) | 12-16h | ⬜ Offen |
 | 3 | Logged-Out Features | 8-12h | ⬜ Offen |
 | 4 | Legal Page | 2h | ⬜ Offen |
@@ -173,7 +175,7 @@ Priorisierte Reihenfolge aller Todos.
 | 8 | NIP-17 Private DMs | 15-20h | ⬜ Offen |
 | 9 | Cross-Platform | 12-18h | ⬜ Letztes |
 
-**Gesamt verbleibend:** ~65-95h (ohne optionale Features: ~50-70h)
+**Gesamt verbleibend:** ~62-89h (ohne optionale Features: ~47-64h)
 
 ---
 

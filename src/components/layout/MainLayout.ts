@@ -10,6 +10,7 @@ import { CacheManager } from '../../services/CacheManager';
 import { AppState } from '../../services/AppState';
 import { Router } from '../../services/Router';
 import { PostNoteModal } from '../post/PostNoteModal';
+import { ModalService } from '../../services/ModalService';
 import { AuthStateManager } from '../../services/AuthStateManager';
 import { AuthService } from '../../services/AuthService';
 import { EventBus } from '../../services/EventBus';
@@ -642,13 +643,82 @@ export class MainLayout {
 
   /**
    * Handle add account from AccountSwitcher component
-   * Navigate to login view with addAccount flag
+   * Shows instruction modal, then opens terminal for NoorSigner add-account
    */
   private handleAddAccount(): void {
     console.log('[MainLayout] handleAddAccount called');
+
+    const authMethod = this.authService.getAuthMethod();
+
+    if (authMethod === 'key-signer') {
+      // NoorSigner: Show instruction modal first
+      this.showAddAccountInstructions();
+    } else {
+      // Bunker: Navigate to login
+      sessionStorage.setItem('noornote_add_account', 'true');
+      const router = Router.getInstance();
+      router.navigate('/login');
+    }
+  }
+
+  /**
+   * Show add account instructions modal for NoorSigner users
+   */
+  private showAddAccountInstructions(): void {
+    const modalService = ModalService.getInstance();
+
+    const content = document.createElement('div');
+    content.innerHTML = `
+      <p style="margin-bottom: 1rem;">
+        A terminal window will open. There:
+      </p>
+      <ol style="margin-bottom: 1.5rem; padding-left: 1.5rem;">
+        <li>Paste the nsec of the new account</li>
+        <li>Set a password for this account</li>
+        <li>Close the terminal</li>
+        <li>Come back here and log in with NoorSigner</li>
+      </ol>
+      <button class="btn" data-action="confirm-add-account">OK, got it</button>
+    `;
+
+    const confirmBtn = content.querySelector('[data-action="confirm-add-account"]');
+    confirmBtn?.addEventListener('click', async () => {
+      modalService.hide();
+      await this.launchAddAccountTerminal();
+    });
+
+    modalService.show({
+      title: 'Add Account',
+      content,
+      width: '400px',
+      height: 'auto',
+      showCloseButton: true,
+      closeOnOverlay: true,
+      closeOnEsc: true
+    });
+  }
+
+  /**
+   * Launch terminal for NoorSigner add-account
+   */
+  private async launchAddAccountTerminal(): Promise<void> {
+    // 1. Navigate to login first
     sessionStorage.setItem('noornote_add_account', 'true');
     const router = Router.getInstance();
     router.navigate('/login');
+
+    // 2. Kill daemon and open terminal
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+
+      // Kill existing daemon
+      await invoke('cancel_key_signer_launch');
+
+      // Open terminal with add-account
+      await invoke('launch_key_signer', { mode: 'add-account' });
+    } catch (error) {
+      console.error('[MainLayout] Failed to launch add-account terminal:', error);
+    }
   }
 
   /**

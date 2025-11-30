@@ -173,69 +173,14 @@ pub async fn cancel_key_signer_launch() -> Result<(), String> {
 pub async fn launch_key_signer(mode: String) -> Result<(), String> {
     use std::process::Command;
 
-    // Determine executable name based on platform
-    #[cfg(target_os = "macos")]
-    let exe_name = if cfg!(target_arch = "aarch64") {
-        "noorsigner-macos-arm64"
+    let noorsigner_path = if cfg!(debug_assertions) {
+        // Dev: self-compiled binary in ../noorsigner/
+        let home = std::env::var("HOME")
+            .map_err(|_| "Failed to get HOME directory".to_string())?;
+        PathBuf::from(home).join("projects").join("noorsigner").join("noorsigner")
     } else {
-        "noorsigner-macos-amd64"
-    };
-
-    #[cfg(target_os = "linux")]
-    let exe_name = if cfg!(target_arch = "aarch64") {
-        "noorsigner-linux-arm64"
-    } else {
-        "noorsigner-linux-amd64"
-    };
-
-    #[cfg(target_os = "windows")]
-    let exe_name = "noorsigner-windows-amd64.exe";
-
-    // Get path to bundled NoorSigner binary
-    let current_exe = std::env::current_exe()
-        .map_err(|e| format!("Failed to get current exe path: {}", e))?;
-
-    let exe_dir = current_exe
-        .parent()
-        .ok_or_else(|| "Failed to get parent directory".to_string())?;
-
-    // Determine if we're in dev mode or production bundle
-    let is_dev = cfg!(debug_assertions);
-
-    let noorsigner_path = if is_dev {
-        // Dev mode: Use ../../noorsigner/bin/ relative to project root
-        // exe_dir is likely src-tauri/target/debug/ or similar
-        let project_root = exe_dir
-            .parent() // target/
-            .and_then(|p| p.parent()) // src-tauri/
-            .and_then(|p| p.parent()) // noornote/ (project root)
-            .ok_or_else(|| "Failed to find project root".to_string())?;
-
-        // NoorSigner is now in ../noorsigner/ (sibling of noornote/)
-        project_root
-            .parent() // projects/
-            .ok_or_else(|| "Failed to find projects root".to_string())?
-            .join("noorsigner")
-            .join("bin")
-            .join(exe_name)
-    } else {
-        // Production: Use bundled resources
-        #[cfg(target_os = "macos")]
-        {
-            let resource_dir = exe_dir.parent()
-                .and_then(|p| Some(p.join("Resources")))
-                .ok_or_else(|| "Failed to locate Resources directory".to_string())?;
-
-            // Tauri bundles resources in _up_/noorsigner/bin/
-            resource_dir.join("_up_").join("noorsigner").join("bin").join(exe_name)
-        }
-
-        #[cfg(not(target_os = "macos"))]
-        {
-            let resource_dir = exe_dir.to_path_buf();
-            // Tauri bundles resources in _up_/noorsigner/bin/
-            resource_dir.join("_up_").join("noorsigner").join("bin").join(exe_name)
-        }
+        // Production: installed in /usr/local/bin/
+        PathBuf::from("/usr/local/bin/noorsigner")
     };
 
     // Verify binary exists
@@ -262,6 +207,7 @@ pub async fn launch_key_signer(mode: String) -> Result<(), String> {
     let command = match mode.as_str() {
         "init" => "init",
         "daemon" => "daemon",
+        "add-account" => "add-account",
         _ => return Err(format!("Invalid mode: {}", mode)),
     };
 

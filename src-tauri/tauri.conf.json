@@ -36,9 +36,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": [
-      "../../noorsigner/bin/noorsigner-*"
-    ]
+    "resources": []
   },
   "plugins": {
     "fs": {
