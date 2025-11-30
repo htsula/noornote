@@ -2,39 +2,17 @@
 
 > **Siehe auch:** [Platform-Strategie](./platform-strategy.md) für Gesamtübersicht
 
-## Strategie: Dual-Platform
+## Strategie: Desktop-Only
 
-Login-Optionen für beide Plattformen (Browser + Tauri) parallel entwickelt.
+Login-Optionen für Tauri Desktop-App.
 
-## Login-Optionen nach Plattform
+## Login-Optionen
 
-### Browser (Rust-Server)
-1. **Browser Extension** - Alby, nos2x, etc. (NIP-07)
-2. **Hardware Remote Signer** - bunker:// URI (NIP-46)
-
-### Tauri Desktop
-1. **NoorSigner** - Lokaler Key Signer
+1. **NoorSigner** - Lokaler Key Signer (primär)
 2. **Hardware Remote Signer** - bunker:// URI (NIP-46)
 
 ## Login-Screen UI
 
-### Browser-Modus
-```
-┌─────────────────────────────────────┐
-│       Welcome to NoorNote           │
-│                                     │
-│  ┌─────────────────────────────┐    │
-│  │  🔐 Login with Extension    │    │  ← Browser Extension (NIP-07)
-│  └─────────────────────────────┘    │
-│                                     │
-│  ─────── or ───────                 │
-│                                     │
-│  [ bunker://... ]  [Connect]        │  ← Hardware Remote Signer
-│                                     │
-└─────────────────────────────────────┘
-```
-
-### Tauri-Modus
 ```
 ┌─────────────────────────────────────┐
 │       Welcome to NoorNote           │
@@ -51,10 +29,14 @@ Login-Optionen für beide Plattformen (Browser + Tauri) parallel entwickelt.
 ```
 
 ## Betroffene Dateien
+
 - `src/components/auth/AuthComponent.ts` - Login UI
 - `src/services/AuthService.ts` - Auth-Logik
-- `src/services/PlatformService.ts` - Platform-Erkennung
+- `src/services/KeySignerClient.ts` - NoorSigner Integration
 
-## Implementierung
+## TODO: Browser-Code entfernen
 
-Siehe [platform-strategy.md](./platform-strategy.md) für Details.
+Nach NoorSigner Cross-Platform Port:
+- [ ] NIP-07 Extension Code entfernen
+- [ ] `PlatformService.supportsNip07` entfernen
+- [ ] Login UI vereinfachen (keine Platform-Checks mehr)
