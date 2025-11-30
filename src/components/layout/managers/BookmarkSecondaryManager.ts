@@ -22,6 +22,7 @@ import { NostrTransport } from '../../../services/transport/NostrTransport';
 import { RelayConfig } from '../../../services/RelayConfig';
 import { ListSyncManager } from '../../../services/sync/ListSyncManager';
 import { BookmarkStorageAdapter } from '../../../services/sync/adapters/BookmarkStorageAdapter';
+import { RestoreListsService } from '../../../services/RestoreListsService';
 import { SyncConfirmationModal } from '../../modals/SyncConfirmationModal';
 import { NewFolderModal } from '../../modals/NewFolderModal';
 import { BookmarkCard, type BookmarkCardData } from '../../bookmarks/BookmarkCard';
@@ -150,8 +151,25 @@ export class BookmarkSecondaryManager {
     this.isLoading = true;
 
     try {
-      const bookmarksFromBrowser = this.adapter.getBrowserItems();
+      // Use RestoreListsService for cascading restore (browser → file → relays)
+      const restoreService = RestoreListsService.getInstance();
+      const result = await restoreService.restoreIfEmpty(
+        this.listSyncManager,
+        () => this.adapter.getBrowserItems(),
+        (items) => this.adapter.setBrowserItems(items),
+        'Bookmarks',
+        async () => {
+          // Restore folder data before file restore
+          await this.adapter.restoreFolderDataFromFile();
+        }
+      );
 
+      if (result.source === 'empty') {
+        this.bookmarksCache.clear();
+        return;
+      }
+
+      const bookmarksFromBrowser = this.adapter.getBrowserItems();
       if (bookmarksFromBrowser.length === 0) {
         this.bookmarksCache.clear();
         return;

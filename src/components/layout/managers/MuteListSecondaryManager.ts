@@ -18,6 +18,7 @@ import { hexToNpub } from '../../../helpers/nip19';
 import { extractDisplayName } from '../../../helpers/extractDisplayName';
 import { ListSyncManager } from '../../../services/sync/ListSyncManager';
 import { MuteStorageAdapter } from '../../../services/sync/adapters/MuteStorageAdapter';
+import { RestoreListsService } from '../../../services/RestoreListsService';
 import { NostrTransport } from '../../../services/transport/NostrTransport';
 import type { UserProfile } from '../../../services/UserProfileService';
 
@@ -38,6 +39,7 @@ export class MuteListSecondaryManager extends BaseListSecondaryManager<string, M
   private userProfileService: UserProfileService;
   private router: Router;
   private mutedThreads: MutedThread[] = [];
+  private adapter: MuteStorageAdapter;
 
   constructor(containerElement: HTMLElement) {
     const adapter = new MuteStorageAdapter();
@@ -45,6 +47,7 @@ export class MuteListSecondaryManager extends BaseListSecondaryManager<string, M
 
     super(containerElement, listSyncManager);
 
+    this.adapter = adapter;
     this.muteOrch = MuteOrchestrator.getInstance();
     this.userProfileService = UserProfileService.getInstance();
     this.router = Router.getInstance();
@@ -82,6 +85,15 @@ export class MuteListSecondaryManager extends BaseListSecondaryManager<string, M
   protected async getAllItemsWithProfiles(): Promise<MuteItemWithProfile[]> {
     const currentUser = this.authService.getCurrentUser();
     if (!currentUser) throw new Error('User not authenticated');
+
+    // Use RestoreListsService for cascading restore (browser → file → relays)
+    const restoreService = RestoreListsService.getInstance();
+    await restoreService.restoreIfEmpty(
+      this.listSyncManager,
+      () => this.adapter.getBrowserItems(),
+      (items) => this.adapter.setBrowserItems(items),
+      'Mutes'
+    );
 
     // Read ALL muted pubkeys from browser storage (public + private merged)
     const allMutedPubkeys = await this.muteOrch.getAllMutedUsers();
