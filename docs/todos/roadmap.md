@@ -173,5 +173,7 @@ Priorisierte Reihenfolge aller Todos.
 
 ## Weitere Dateien
 
-- `todos.md` - Bugs, Features, Monitoring (volatile)
 - `x-platform/*.md` - Platform-Strategie Details
+- `mutual-check-*.md` - Mutual Check Feature Details (6 Dateien)
+- `noorsigner-multi-account.md` - Multi-Account API Details
+- `tauri-only-strategy.md` - Cross-Platform Details
