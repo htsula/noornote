@@ -8,15 +8,21 @@ Priorisierte Reihenfolge aller Todos.
 
 **Datei:** `noorsigner-multi-account.md` (Phase 4)
 
-**Status:** NoorSigner API fertig, NoorNote-Integration fehlt
+**Status:** 🟡 TEILWEISE FERTIG
 
-**Scope:**
-- KeySignerClient.ts erweitern (listAccounts, switchAccount, etc.)
-- AccountSwitcher Component (ersetzt UserStatus)
-- Passwort-Modal für Account-Switch
-- Add Account Flow in AuthComponent
+**Erledigt:**
+- ✅ `switchAccount()` in KeySignerClient
+- ✅ Passwort-Modal für Account-Switch
+- ✅ Per-user file storage (`~/.noornote/{npub}/`)
+- ✅ Cache-Clearing bei user:login Events
 
-**Aufwand:** ~4-6h
+**Offen:**
+- ❌ `listAccounts()`, `addAccount()`, `removeAccount()`, `getActiveAccount()` in KeySignerClient
+- ❌ AccountSwitcher Component (Dropdown mit allen Accounts, ersetzt UserStatus)
+- ❌ "+ Add Account" Flow in AuthComponent
+- ❌ AccountStorageService (Account-Metadaten cachen)
+
+**Aufwand verbleibend:** ~3-4h
 
 ---
 
@@ -155,19 +161,19 @@ Priorisierte Reihenfolge aller Todos.
 
 ## Zusammenfassung
 
-| # | Feature | Aufwand | Priorität |
-|---|---------|---------|-----------|
-| 1 | Multi-User Integration | 4-6h | HIGH |
-| 2 | Mutual Check (Phase 1-4) | 12-16h | HIGH |
-| 3 | Logged-Out Features | 8-12h | MEDIUM |
-| 4 | Legal Page | 2h | LOW |
-| 5 | Zap Display Fix | 2-4h | LOW |
-| 6 | NIP-51 Bookmarks | 6-10h | LOW (optional) |
-| 7 | Auto List Sync | 8-12h | LOW (optional) |
-| 8 | NIP-17 Private DMs | 15-20h | MEDIUM |
-| 9 | Cross-Platform | 12-18h | LOW (last) |
+| # | Feature | Aufwand | Status |
+|---|---------|---------|--------|
+| 1 | Multi-User Integration | ~3-4h verbleibend | 🟡 Teilweise |
+| 2 | Mutual Check (Phase 1-4) | 12-16h | ⬜ Offen |
+| 3 | Logged-Out Features | 8-12h | ⬜ Offen |
+| 4 | Legal Page | 2h | ⬜ Offen |
+| 5 | Zap Display Fix | 2-4h | ⬜ Offen |
+| 6 | NIP-51 Bookmarks | 6-10h | ⬜ Optional |
+| 7 | Auto List Sync | 8-12h | ⬜ Optional |
+| 8 | NIP-17 Private DMs | 15-20h | ⬜ Offen |
+| 9 | Cross-Platform | 12-18h | ⬜ Letztes |
 
-**Gesamt:** ~70-100h (ohne optionale Features: ~55-75h)
+**Gesamt verbleibend:** ~65-95h (ohne optionale Features: ~50-70h)
 
 ---
 

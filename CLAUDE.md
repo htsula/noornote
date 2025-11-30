@@ -28,7 +28,13 @@
     - Never mentions other client in commit message.
 6. **Push:** User says "push" → `git checkout main && git merge development && git push && git checkout development` → confirm (say: "Back at development branch. Awaiting instructions.").
 7. **Research:** New features REQUIRE upfront research (NIPs, Jumble/Amethyst, NDK docs). Document findings in `docs/todos/` BEFORE coding.
-8. And last but not least: DON'T GUESS! DON'T GUESS! DON'T GUESS! DON'T GUESS! DON'T GUESS! DON'T GUESS! DON'T GUESS! DON'T GUESS!
+8. **Roadmap (⚠️KRITISCH⚠️):**
+    - `docs/todos/roadmap.md` ist der ZENTRALE FAHRPLAN - IMMER aktuell halten!
+    - Nach jeder Session: Status in roadmap.md updaten
+    - Feature erst abhaken wenn VOLLSTÄNDIG umgesetzt
+    - Fertige Features: Todo-Datei nach `docs/features/` verschieben
+    - Verweise auf Detail-Dateien aktuell halten
+9. And last but not least: DON'T GUESS! DON'T GUESS! DON'T GUESS! DON'T GUESS! DON'T GUESS! DON'T GUESS! DON'T GUESS! DON'T GUESS!
 
 ⚠️ DON'T GUESS! DON'T GUESS! DON'T GUESS! DON'T GUESS! DON'T GUESS! ⚠️
 

@@ -180,15 +180,20 @@ class AccountStorageService {
 ### Phase 4 Tasks
 - [ ] KeySignerClient.ts: `listAccounts()` implementieren
 - [ ] KeySignerClient.ts: `addAccount()` implementieren
-- [ ] KeySignerClient.ts: `switchAccount()` implementieren
+- [x] KeySignerClient.ts: `switchAccount()` implementieren ✅
 - [ ] KeySignerClient.ts: `removeAccount()` implementieren
 - [ ] KeySignerClient.ts: `getActiveAccount()` implementieren
 - [ ] AccountStorageService erstellen
 - [ ] AccountSwitcher Component erstellen
-- [ ] Passwort-Modal für Switch erstellen
+- [x] Passwort-Modal für Switch erstellen ✅
 - [ ] MainLayout: UserStatus → AccountSwitcher ersetzen
 - [ ] AuthComponent: `addAccount` Query-Param Support
 - [ ] SCSS für AccountSwitcher
+
+### Zusätzlich erledigt (2024-11-30)
+- [x] Per-user file storage (`~/.noornote/{npub}/`) ✅
+- [x] Cache-Clearing bei user:login Events ✅
+- [x] RestoreListsService für cascading restore ✅
 
 ---
 
