@@ -553,9 +553,6 @@ export class ReplyModal {
       });
 
       this.systemLogger.info('ReplyModal', `📥 Received reply event: ${replyEvent ? replyEvent.id?.slice(0, 8) : 'NULL'}`);
-      console.log('[ReplyModal DEBUG] replyEvent:', replyEvent);
-      console.log('[ReplyModal DEBUG] replyEvent type:', typeof replyEvent);
-      console.log('[ReplyModal DEBUG] replyEvent truthy?', !!replyEvent);
 
       if (replyEvent) {
         // Update parent note's reply count (cache invalidation + optimistic UI update)
