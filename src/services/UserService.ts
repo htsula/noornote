@@ -52,28 +52,32 @@ export class UserService {
 
   /**
    * Get current user's following list from browserItems (localStorage)
-   * Falls back to files if browserItems is empty (first load)
+   * Falls back to relays if browserItems is empty (account switch or first load)
    */
   private async getCurrentUserFollowing(): Promise<string[]> {
     try {
       // Read from browserItems (localStorage)
-      let browserItems = this.followAdapter.getBrowserItems();
+      const browserItems = this.followAdapter.getBrowserItems();
 
-      // If browserItems is empty, initialize from files (first load)
-      if (browserItems.length === 0) {
-        const fileItems = await this.followAdapter.getFileItems();
-        if (fileItems.length > 0) {
-          this.followAdapter.setBrowserItems(fileItems);
-          browserItems = fileItems;
+      // If browserItems has data, use it
+      if (browserItems.length > 0) {
+        return browserItems.map(item => item.pubkey);
+      }
+
+      // If browserItems is empty, fetch from relays (not files - files are not per-user)
+      const currentUser = AuthService.getInstance().getCurrentUser();
+      if (currentUser?.pubkey) {
+        const relayFollows = await this.getOtherUserFollowing(currentUser.pubkey);
+        if (relayFollows.length > 0) {
+          // Cache in browserItems for future use
+          const items = relayFollows.map(pubkey => ({ pubkey, petname: undefined }));
+          this.followAdapter.setBrowserItems(items);
+          return relayFollows;
         }
       }
 
-      if (browserItems.length === 0) {
-        this.systemLogger.warn('UserService', 'No follow list found, using fallback');
-        return this.relayConfig.getFallbackFollowing();
-      }
-
-      return browserItems.map(item => item.pubkey);
+      this.systemLogger.warn('UserService', 'No follow list found, using fallback');
+      return this.relayConfig.getFallbackFollowing();
     } catch (error) {
       this.systemLogger.error('UserService', `Error fetching follow list: ${error}`);
       return this.relayConfig.getFallbackFollowing();

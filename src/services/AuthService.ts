@@ -17,6 +17,7 @@ import {
 } from './NostrToolsAdapter';
 import { KeychainStorage } from './KeychainStorage';
 import { EventBus } from './EventBus';
+import { AccountStorageService, type StoredAccount } from './AccountStorageService';
 import { KeySignerClient } from './KeySignerClient';
 import { KeySignerConnectionManager } from './managers/KeySignerConnectionManager';
 import { Nip46SignerManager } from './managers/Nip46SignerManager';
@@ -55,6 +56,7 @@ export class AuthService {
   private isReadOnly: boolean = false; // True when logged in with npub only
   private readonly storageKey = 'noornote_auth_session';
   private eventBus: EventBus;
+  private accountStorage: AccountStorageService;
 
   // Initialization state (like Jumble's isInitialized pattern)
   private isInitialized: boolean = false;
@@ -63,6 +65,7 @@ export class AuthService {
 
   private constructor() {
     this.eventBus = EventBus.getInstance();
+    this.accountStorage = AccountStorageService.getInstance();
 
     // Create initialization promise
     this.initPromise = new Promise<void>(resolve => {
@@ -342,6 +345,7 @@ export class AuthService {
       this.currentUser = { npub: result.npub, pubkey: result.pubkey };
       this.authMethod = 'nip46';
       this.saveSession();
+      this.saveToAccountStorage(bunkerUri);
 
       // Emit login event for NIP-65 relay list fetching
       this.eventBus.emit('user:login', { npub: result.npub, pubkey: result.pubkey });
@@ -391,6 +395,7 @@ export class AuthService {
         this.currentUser = { npub: result.npub, pubkey: result.pubkey };
         this.authMethod = 'key-signer';
         // NO saveSession() - daemon is single source of truth
+        this.saveToAccountStorage();
 
         console.log('[AuthService] Auto-logged in with KeySigner:', result.npub);
         this.eventBus.emit('user:login', { npub: result.npub, pubkey: result.pubkey });
@@ -431,6 +436,7 @@ export class AuthService {
         this.currentUser = { npub: result.npub, pubkey: result.pubkey };
         this.authMethod = 'key-signer';
         // NO saveSession() - daemon is single source of truth
+        this.saveToAccountStorage();
 
         // Emit login event for NIP-65 relay list fetching
         this.eventBus.emit('user:login', { npub: result.npub, pubkey: result.pubkey });
@@ -482,6 +488,7 @@ export class AuthService {
       this.currentUser = { npub, pubkey };
       this.authMethod = 'extension';
       this.saveSession();
+      this.saveToAccountStorage();
 
       // Emit login event for NIP-65 relay list fetching
       this.eventBus.emit('user:login', { npub, pubkey });
@@ -930,5 +937,136 @@ export class AuthService {
    */
   public getAuthMethod(): AuthMethod | null {
     return this.authMethod;
+  }
+
+  // ==========================================
+  // Multi-Account Support Methods
+  // ==========================================
+
+  /**
+   * Get all stored accounts
+   */
+  public getStoredAccounts(): StoredAccount[] {
+    return this.accountStorage.getAccounts();
+  }
+
+  /**
+   * Switch to a stored account
+   */
+  public async switchAccount(pubkey: string): Promise<{ success: boolean; error?: string }> {
+    const account = this.accountStorage.getAccount(pubkey);
+    if (!account) {
+      return { success: false, error: 'Account not found' };
+    }
+
+    // First sign out current user (without stopping daemon for key-signer)
+    await this.signOutWithoutDaemonStop();
+
+    // Now authenticate with the stored account
+    switch (account.authMethod) {
+      case 'extension':
+        const extResult = await this.authenticate();
+        if (extResult.success) {
+          this.accountStorage.touchAccount(pubkey);
+        }
+        return extResult;
+
+      case 'nip46':
+        if (account.bunkerUri) {
+          const bunkerResult = await this.authenticateWithBunker(account.bunkerUri);
+          if (bunkerResult.success) {
+            this.accountStorage.touchAccount(pubkey);
+          }
+          return bunkerResult;
+        }
+        return { success: false, error: 'No bunker URI stored for this account' };
+
+      case 'key-signer':
+        const keySignerResult = await this.authenticateWithKeySigner();
+        if (keySignerResult.success) {
+          this.accountStorage.touchAccount(pubkey);
+        }
+        return keySignerResult;
+
+      default:
+        return { success: false, error: `Unsupported auth method: ${account.authMethod}` };
+    }
+  }
+
+  /**
+   * Sign out without stopping daemon (for account switching)
+   */
+  private async signOutWithoutDaemonStop(): Promise<void> {
+    // Stop daemon polling but don't stop daemon itself
+    if (this.keySignerManager) {
+      this.keySignerManager.stopDaemonPolling();
+    }
+
+    // Cleanup NIP-46 signer
+    if (this.nip46Manager) {
+      this.nip46Manager.cleanup();
+      this.nip46Manager = null;
+    }
+
+    // Clear session
+    this.currentUser = null;
+    this.extension = null;
+    this.nsec = null;
+    this.authMethod = null;
+    this.isReadOnly = false;
+
+    // Clear auth credentials
+    await KeychainStorage.clearAuth();
+    this.clearSession();
+
+    // Emit logout event
+    this.eventBus.emit('user:logout');
+  }
+
+  /**
+   * Remove a stored account
+   */
+  public async removeStoredAccount(pubkey: string): Promise<void> {
+    // If removing current account, sign out first
+    if (this.currentUser?.pubkey === pubkey) {
+      await this.signOut();
+    }
+
+    // Remove from account storage
+    this.accountStorage.removeAccount(pubkey);
+  }
+
+  /**
+   * Sign out all accounts and clear storage
+   */
+  public async signOutAll(): Promise<void> {
+    // Sign out current user
+    await this.signOut();
+
+    // Clear all stored accounts
+    this.accountStorage.clearAll();
+  }
+
+  /**
+   * Save current session to account storage
+   * Called after successful authentication
+   */
+  private saveToAccountStorage(bunkerUri?: string): void {
+    if (!this.currentUser || !this.authMethod) return;
+
+    const account: StoredAccount = {
+      pubkey: this.currentUser.pubkey,
+      npub: this.currentUser.npub,
+      authMethod: this.authMethod,
+      addedAt: Date.now(),
+      lastUsedAt: Date.now()
+    };
+
+    // Add bunkerUri for NIP-46
+    if (bunkerUri) {
+      account.bunkerUri = bunkerUri;
+    }
+
+    this.accountStorage.addAccount(account);
   }
 }

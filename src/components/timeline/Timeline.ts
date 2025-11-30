@@ -99,6 +99,13 @@ export class Timeline extends View {
   }
 
   /**
+   * Get the pubkey this timeline was created for
+   */
+  public getPubkey(): string {
+    return this.userPubkey;
+  }
+
+  /**
    * Setup listener for NSFW preference changes
    */
   private setupNSFWPreferenceListener(): void {

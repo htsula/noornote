@@ -502,8 +502,20 @@ export class App {
       this.router.navigate('/');
     }
 
-    // Create TimelineUI for logged-in user (only if not already created by route handler)
-    if (!this.timelineUI) {
+    // Check if localStorage has data from a different user (handles cross-session account switch)
+    const lastLoggedInPubkey = localStorage.getItem('noornote_last_logged_in_pubkey');
+    if (lastLoggedInPubkey && lastLoggedInPubkey !== data.pubkey) {
+      this.clearUserSpecificCaches();
+    }
+    localStorage.setItem('noornote_last_logged_in_pubkey', data.pubkey);
+
+    // Create or recreate TimelineUI for logged-in user
+    if (this.timelineUI) {
+      if (this.timelineUI.getPubkey() !== data.pubkey) {
+        this.timelineUI.destroy();
+        this.timelineUI = new Timeline(data.pubkey);
+      }
+    } else {
       this.timelineUI = new Timeline(data.pubkey);
     }
 
@@ -547,6 +559,27 @@ export class App {
     } catch (error) {
       // Notifications orchestrator start failed
     }
+  }
+
+  /**
+   * Clear user-specific caches when switching accounts
+   * These caches are not per-user, so they must be cleared on account switch
+   */
+  private clearUserSpecificCaches(): void {
+    const keysToRemove = [
+      'noornote_follows_browser',
+      'noornote_bookmarks_browser',
+      'noornote_mutes_browser_v2',
+      'noornote_notifications_cache',
+      'noornote_notifications_last_seen',
+      'noornote_user_event_ids',
+      'noornote_user_event_ancestry',
+      'noornote_bookmark_folders',
+      'noornote_bookmark_folder_assignments',
+      'noornote_bookmark_root_order'
+    ];
+
+    keysToRemove.forEach(key => localStorage.removeItem(key));
   }
 }
 
