@@ -2,11 +2,13 @@
 
 ## Übersicht
 
-NoorSigner muss mehrere Keys verwalten können, damit NoorNote im Tauri-Modus Account-Switching unterstützt.
+NoorSigner verwaltet mehrere Keys, damit NoorNote Account-Switching unterstützt.
 
-## Aktueller Stand (NoorSigner) - IMPLEMENTIERT
+---
 
-**CLI Commands:**
+## NoorSigner Stand (Phasen 1-3) - ✅ FERTIG
+
+### CLI Commands
 ```bash
 noorsigner add-account     # nsec + Passwort einrichten
 noorsigner list-accounts   # Alle Accounts auflisten
@@ -14,12 +16,9 @@ noorsigner switch <npub>   # Account wechseln
 noorsigner remove-account <npub>  # Account entfernen
 noorsigner init            # Alias für add-account (erster Account)
 noorsigner daemon          # Daemon starten
-noorsigner sign            # Direktes Signieren
-noorsigner test            # Test mit direktem nsec
-noorsigner test-daemon     # Test via Socket
 ```
 
-**Dateistruktur:**
+### Dateistruktur
 ```
 ~/.noorsigner/
 ├── accounts/
@@ -33,198 +32,180 @@ noorsigner test-daemon     # Test via Socket
 └── noorsigner.sock           # Daemon socket (shared)
 ```
 
-**Daemon-Start-Ablauf:**
-1. Lädt aktiven Account aus `active_account`
-2. Lädt `~/.noorsigner/accounts/<npub>/keys.encrypted`
-3. Prüft Trust Session (`trust_session`) - 24h Cache pro Account
-4. Falls gültig → kein Passwort nötig
-5. Falls abgelaufen → Passwort-Prompt
-6. Fork in Background
-7. Socket erstellen (`noorsigner.sock`)
-8. Auf Sign-Requests warten
-9. Live Account-Switch via API möglich
+### API Endpoints (Socket IPC)
 
----
-
-## API Endpoints (Socket IPC) - IMPLEMENTIERT
-
-### 1. `list_accounts`
-Listet alle gespeicherten Accounts (nur pubkeys, keine secrets).
-
-**Request:**
+**`list_accounts`**
 ```json
-{ "id": "req-001", "method": "list_accounts" }
+Request:  { "id": "req-001", "method": "list_accounts" }
+Response: { "id": "req-001", "accounts": [...], "active_pubkey": "abc123..." }
 ```
 
-**Response:**
+**`add_account`**
 ```json
-{
-  "id": "req-001",
-  "accounts": [
-    { "pubkey": "abc123...", "npub": "npub1...", "created_at": 1234567890 },
-    { "pubkey": "def456...", "npub": "npub1...", "created_at": 1234567891 }
-  ],
-  "active_pubkey": "abc123..."
-}
+Request:  { "id": "req-002", "method": "add_account", "nsec": "nsec1...", "password": "...", "set_active": true }
+Response: { "id": "req-002", "success": true, "pubkey": "...", "npub": "..." }
 ```
 
-### 2. `add_account`
-Fügt neuen Account hinzu (nsec + Passwort).
-
-**Request:**
+**`switch_account`**
 ```json
-{
-  "id": "req-002",
-  "method": "add_account",
-  "nsec": "nsec1...",
-  "password": "user_password",
-  "set_active": true
-}
+Request:  { "id": "req-003", "method": "switch_account", "pubkey": "def456...", "password": "..." }
+Response: { "id": "req-003", "success": true, "pubkey": "...", "npub": "..." }
 ```
 
-**Response:**
+**`remove_account`**
 ```json
-{
-  "id": "req-002",
-  "success": true,
-  "pubkey": "abc123...",
-  "npub": "npub1..."
-}
+Request:  { "id": "req-004", "method": "remove_account", "pubkey": "...", "password": "..." }
+Response: { "id": "req-004", "success": true }
 ```
 
-### 3. `switch_account`
-Wechselt aktiven Account (erfordert Passwort für den Ziel-Account).
-
-**Request:**
+**`get_active_account`**
 ```json
-{
-  "id": "req-003",
-  "method": "switch_account",
-  "pubkey": "def456...",
-  "password": "password_for_this_account"
-}
-```
-
-oder mit npub:
-```json
-{
-  "id": "req-003",
-  "method": "switch_account",
-  "npub": "npub1def...",
-  "password": "password_for_this_account"
-}
-```
-
-**Response:**
-```json
-{
-  "id": "req-003",
-  "success": true,
-  "pubkey": "def456...",
-  "npub": "npub1..."
-}
-```
-
-### 4. `remove_account`
-Entfernt Account (kann nicht den aktiven Account entfernen).
-
-**Request:**
-```json
-{
-  "id": "req-004",
-  "method": "remove_account",
-  "pubkey": "def456...",
-  "password": "password_for_this_account"
-}
-```
-
-**Response:**
-```json
-{ "id": "req-004", "success": true }
-```
-
-### 5. `get_active_account`
-Gibt aktuell aktiven Account zurück.
-
-**Request:**
-```json
-{ "id": "req-005", "method": "get_active_account" }
-```
-
-**Response:**
-```json
-{
-  "id": "req-005",
-  "pubkey": "abc123...",
-  "npub": "npub1...",
-  "is_unlocked": true
-}
+Request:  { "id": "req-005", "method": "get_active_account" }
+Response: { "id": "req-005", "pubkey": "...", "npub": "...", "is_unlocked": true }
 ```
 
 ---
 
-## Passwort-Handling
+## Phase 4: NoorNote Integration - ❌ TODO
 
-**Entscheidung:** Separates Passwort pro Account
-- Jeder Account hat eigenes Passwort
-- Beim Switch muss Passwort eingegeben werden
-- Sicherer als Master-Passwort
+### 4.1 KeySignerClient.ts erweitern
 
----
+```typescript
+class KeySignerClient {
+  // Existing methods...
 
-## Implementation Phasen
+  // NEW: Multi-account methods
+  async listAccounts(): Promise<Account[]>
+  async addAccount(nsec: string, password: string, setActive?: boolean): Promise<AddAccountResult>
+  async switchAccount(pubkeyOrNpub: string, password: string): Promise<SwitchResult>
+  async removeAccount(pubkey: string, password: string): Promise<boolean>
+  async getActiveAccount(): Promise<ActiveAccount>
+}
+```
 
-### Phase 1: Storage Migration (NoorSigner) - FERTIG
-- [x] Neue Dateistruktur implementieren (`accounts/npub.../`)
-- [x] Migration von Single-Account zu Multi-Account
-- [x] `active_account` File für aktiven Account
-- [x] Backwards-Compatibility für bestehende Installationen
+### 4.2 AccountSwitcher Component
 
-### Phase 2: CLI Commands (NoorSigner) - FERTIG
-- [x] `add-account` implementieren
-- [x] `list-accounts` implementieren
-- [x] `switch` implementieren
-- [x] `remove-account` implementieren
-- [x] `init` als Alias für add-account (erster Account)
+Dropdown in `.secondary-user` (ersetzt UserStatus):
 
-### Phase 3: API Endpoints (NoorSigner) - FERTIG
-- [x] `list_accounts` implementieren
-- [x] `add_account` implementieren
-- [x] `switch_account` implementieren
-- [x] `remove_account` implementieren
-- [x] `get_active_account` implementieren
-- [x] Daemon nutzt neue Multi-Account Storage
-- [x] Live Account-Switch im Daemon (ohne Neustart)
-- [x] Thread-safe Account-Wechsel mit RWMutex
+```
+┌─────────────────────────────┐
+│  ● username                 │  ← Current user (green dot = active)
+│  [Sign Out ▼]               │  ← Dropdown trigger
+├─────────────────────────────┤
+│  SWITCH ACCOUNT             │
+│  ┌─────────────────────────┐│
+│  │ 👤 alice    [NoorSigner]││  ← Active account
+│  │ 👤 bob      [NoorSigner]││  ← Password required to switch
+│  │ + Add account           ││
+│  └─────────────────────────┘│
+│  ← Log out alice            │
+│  ← Log out all              │
+└─────────────────────────────┘
+```
 
-### Phase 4: NoorNote Integration - OFFEN
-- [ ] KeySignerClient.ts erweitern für neue APIs
-- [ ] AccountSwitcher: Passwort-Dialog für Switch bei NoorSigner
-- [ ] AuthComponent: Add Account Flow für NoorSigner
+**Passwort-Dialog bei Switch:**
+- NoorSigner erfordert Passwort für jeden Account
+- Modal mit Passwort-Eingabe vor Switch
+- Trust Session (24h) gilt pro Account
+
+### 4.3 "Add Account" Flow
+
+1. User klickt "+ Add account" in AccountSwitcher
+2. Router navigiert zu `/login?addAccount=true`
+3. AuthComponent erkennt `addAccount` param
+4. Nach erfolgreichem Login:
+   - Account zu NoorSigner hinzugefügt (via `add_account` API)
+   - Zurück zur vorherigen Route
+5. AccountSwitcher zeigt neuen Account
+
+### 4.4 Account Switch Flow
+
+1. User klickt auf anderen Account
+2. Passwort-Modal erscheint
+3. Nach Eingabe: `KeySignerClient.switchAccount(npub, password)`
+4. Bei Erfolg:
+   - `user:logout` emittiert (clears caches)
+   - `user:login` emittiert (loads new profile)
+   - UI aktualisiert sich
+
+### 4.5 AccountStorageService
+
+Speichert Account-Metadaten in localStorage (nicht die Keys - die sind in NoorSigner):
+
+```typescript
+interface StoredAccount {
+  pubkey: string;
+  npub: string;
+  displayName?: string;   // Cached from profile
+  avatarUrl?: string;     // Cached from profile
+  addedAt: number;
+  lastUsedAt: number;
+}
+
+class AccountStorageService {
+  private readonly STORAGE_KEY = 'noornote_accounts';
+
+  getAccounts(): StoredAccount[]
+  addAccount(account: StoredAccount): void
+  removeAccount(pubkey: string): void
+  updateAccount(pubkey: string, updates: Partial<StoredAccount>): void
+}
+```
 
 ---
 
 ## Betroffene Dateien
 
-### NoorSigner (../noorsigner/) - FERTIG
-- `main.go` - CLI Commands (add-account, list-accounts, switch, remove-account)
+### NoorSigner (../noorsigner/) - ✅ FERTIG
+- `main.go` - CLI Commands
 - `accounts.go` - Multi-Account Storage, Migration
-- `daemon.go` - Daemon mit Multi-Account Support, neue API Endpoints
-- `storage.go` - Bestehende Encryption-Funktionen (unverändert)
-- `README.md` - Vollständige Dokumentation aller Features und API
+- `daemon.go` - API Endpoints
+- `README.md` - Dokumentation
 
-### NoorNote - OFFEN
-- `src/services/KeySignerClient.ts` - Neue API Methods
-- `src/components/ui/AccountSwitcher.ts` - Passwort-Dialog für NoorSigner
-- `src/components/auth/AuthComponent.ts` - Add Account Flow
+### NoorNote - ❌ TODO
+| Datei | Änderung |
+|-------|----------|
+| `src/services/KeySignerClient.ts` | Neue API Methods |
+| `src/services/AccountStorageService.ts` | NEU - Account Metadata |
+| `src/components/ui/AccountSwitcher.ts` | NEU - ersetzt UserStatus |
+| `src/components/ui/UserStatus.ts` | DEPRECATED |
+| `src/styles/components/_account-switcher.scss` | NEU |
+| `src/components/layout/MainLayout.ts` | Update für AccountSwitcher |
+| `src/components/auth/AuthComponent.ts` | Add Account Flow |
 
 ---
 
-## Nächste Schritte
+## Implementation Checklist
 
-1. [x] NoorSigner Codebase analysieren
-2. [x] Entscheidung: Per-Account-Passwort
-3. [x] NoorSigner Phase 1 implementieren (Storage)
-4. [x] NoorSigner Phase 2 implementieren (CLI)
-5. [x] NoorSigner Phase 3 implementieren (API)
-6. [ ] NoorNote Phase 4 implementieren (Integration)
+### Phase 4 Tasks
+- [ ] KeySignerClient.ts: `listAccounts()` implementieren
+- [ ] KeySignerClient.ts: `addAccount()` implementieren
+- [ ] KeySignerClient.ts: `switchAccount()` implementieren
+- [ ] KeySignerClient.ts: `removeAccount()` implementieren
+- [ ] KeySignerClient.ts: `getActiveAccount()` implementieren
+- [ ] AccountStorageService erstellen
+- [ ] AccountSwitcher Component erstellen
+- [ ] Passwort-Modal für Switch erstellen
+- [ ] MainLayout: UserStatus → AccountSwitcher ersetzen
+- [ ] AuthComponent: `addAccount` Query-Param Support
+- [ ] SCSS für AccountSwitcher
+
+---
+
+## Edge Cases
+
+### Passwort-Handling
+- Jeder Account hat eigenes Passwort
+- Trust Session (24h) gilt pro Account separat
+- Bei Switch: Passwort-Prompt wenn Trust Session abgelaufen
+
+### Account Switch
+1. Current session saved
+2. `user:logout` emittiert (clears caches, subscriptions)
+3. `user:login` emittiert (loads profile, relay lists)
+4. UI updates
+
+### Security
+- Keys bleiben in NoorSigner (nie in NoorNote)
+- Nur Metadaten (displayName, avatar) in localStorage
+- Passwort wird nie gespeichert
