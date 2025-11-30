@@ -5,7 +5,7 @@
 
 import { AuthComponent } from '../auth/AuthComponent';
 import { SystemLogger } from '../system/SystemLogger';
-import { UserStatus } from '../ui/UserStatus';
+import { AccountSwitcher } from '../ui/AccountSwitcher';
 import { CacheManager } from '../../services/CacheManager';
 import { AppState } from '../../services/AppState';
 import { Router } from '../../services/Router';
@@ -28,7 +28,7 @@ import { deactivateAllTabs, switchTabWithContent } from '../../helpers/TabsHelpe
 export class MainLayout {
   private element: HTMLElement;
   private systemLogger: SystemLogger;
-  private userStatus: UserStatus | null = null;
+  private userStatus: AccountSwitcher | null = null;
   private searchSpotlight: SearchSpotlight | null = null;
   private keyboardShortcutManager: KeyboardShortcutManager;
   private authComponent: any = null; // Store reference to trigger logout
@@ -589,11 +589,12 @@ export class MainLayout {
       this.userStatus.destroy();
     }
 
-    // Create new user status with logout callback
-    this.userStatus = new UserStatus({
+    // Create new account switcher with callbacks
+    this.userStatus = new AccountSwitcher({
       npub,
       pubkey,
-      onLogout: () => this.handleLogout()
+      onLogout: () => this.handleLogout(),
+      onAddAccount: () => this.handleAddAccount()
     });
 
     // Mount in secondary user area
@@ -611,13 +612,24 @@ export class MainLayout {
   }
 
   /**
-   * Handle logout from UserStatus component
+   * Handle logout from AccountSwitcher component
    */
   private handleLogout(): void {
     if (this.authComponent && this.authComponent.handleLogout) {
       // Call AuthComponent's logout method
       this.authComponent.handleLogout();
     }
+  }
+
+  /**
+   * Handle add account from AccountSwitcher component
+   * Navigate to login view with addAccount flag
+   */
+  private handleAddAccount(): void {
+    console.log('[MainLayout] handleAddAccount called');
+    sessionStorage.setItem('noornote_add_account', 'true');
+    const router = Router.getInstance();
+    router.navigate('/login');
   }
 
   /**

@@ -1,22 +1,24 @@
-# Build Pipeline: Browser-First
+# Build Pipeline: Dual-Platform
 
 > **Siehe auch:** [Platform-Strategie](./platform-strategy.md) für Gesamtübersicht
 
-## Strategie: Browser-First
+## Strategie: Dual-Platform
 
-Rust-Server + Browser für alle Plattformen.
-Tauri optional/später (nur wenn NoorSigner-Nachfrage besteht).
+Rust-Server + Browser UND Tauri Desktop parallel für alle Plattformen.
 
 ## Scope
 
 | Phase | Plattform | Architektur | Format | App-Typ |
 |-------|-----------|-------------|--------|---------|
 | 1 | macOS | ARM64 | .app | Rust-Server |
+| 1 | macOS | ARM64 | .dmg | Tauri |
 | 1 | macOS | AMD64 | .app | Rust-Server |
+| 1 | macOS | AMD64 | .dmg | Tauri |
 | 1 | Linux Desktop | AMD64 | Binary | Rust-Server |
+| 1 | Linux Desktop | AMD64 | .AppImage | Tauri |
 | 1 | Windows | AMD64 | .exe | Rust-Server |
+| 1 | Windows | AMD64 | .msi | Tauri |
 | 2 | Linux Mobile (Librem 5) | ARM64 | ? | TBD |
-| - | (Optional: Tauri) | alle | .dmg/.AppImage | Tauri + NoorSigner |
 
 **Entwicklung:** macOS (Host)
 
@@ -61,37 +63,39 @@ cross build --release --target x86_64-unknown-linux-gnu
 
 ---
 
+## Tauri Desktop
+
+### Konzept
+- Native Desktop-App
+- NoorSigner für lokales Key-Management
+- Keychain-Integration
+- Native File-Dialoge
+
+### Build-Prozess
+```bash
+# Development
+npm run tauri:dev
+
+# Production Build
+npm run tauri build
+```
+
+---
+
 ## Librem 5 - Offene Frage
 
 **Problem:** Gibt es NIP-07 Browser-Extensions für Librem 5?
 
 **Optionen:**
 1. Falls ja → Rust-Server wie andere Plattformen
-2. Falls nein → Tauri + NoorSigner reaktivieren
+2. Falls nein → Nur Tauri mit NoorSigner
 3. Falls nein → Remote Signer (bunker://) als einzige Option
 
 **TODO:** Recherchieren
 
 ---
 
-## Tauri (Optional/Später)
-
-Falls NoorSigner-Nachfrage besteht, bestehende Integration nutzen:
-
-### Bestehende Dateien
-- `KeySignerClient.ts` - Frontend-Kommunikation
-- `key_signer.rs` - Rust-Backend
-- `tauri.conf.json` - Resources-Eintrag
-- `noorsigner/` - Separates Projekt
-
-### Status
-- Code existiert und funktioniert
-- Wird nicht aktiv weiterentwickelt
-- Kann bei Bedarf reaktiviert werden
-
----
-
-## CI/CD (später)
+## CI/CD
 
 GitHub Actions für automatische Releases:
 - Trigger: Git Tag (v1.0.0)
@@ -103,5 +107,5 @@ GitHub Actions für automatische Releases:
 ## Notizen
 
 - Entwicklung erfolgt auf macOS
-- Browser-Extension (Alby/nos2x) für Key-Management
+- Beide Modi (Browser + Tauri) werden parallel entwickelt
 - Unzensierbar: Alles lokal, keine Server-Infrastruktur

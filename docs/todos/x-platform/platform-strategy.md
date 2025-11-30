@@ -1,8 +1,8 @@
-# Platform-Strategie: Browser-First
+# Platform-Strategie: Dual-Platform
 
 ## Übersicht
 
-**Strategie:** Browser-first, Tauri optional/später
+**Strategie:** Browser + Tauri parallel entwickelt
 
 - [Login-Simplification](./login-simplification.md) - Auth-Flows
 - [Build-Pipeline](./build-pipeline.md) - Deployment
@@ -14,9 +14,11 @@
 | Platform | App-Typ | Key-Management |
 |----------|---------|----------------|
 | macOS | Rust-Server + Browser | NIP-07 Extension |
+| macOS | Tauri-App | NoorSigner |
 | Linux | Rust-Server + Browser | NIP-07 Extension |
+| Linux | Tauri-App | NoorSigner |
 | Windows | Rust-Server + Browser | NIP-07 Extension |
-| (Später: Tauri) | Tauri-App | NoorSigner |
+| Windows | Tauri-App | NoorSigner |
 
 ### Rust-Server Konzept
 
@@ -26,24 +28,24 @@ Minimale Binary (~60MB inkl. Assets) für alle Plattformen:
 - Öffnet Default-Browser auf `localhost:PORT`
 - Unzensierbar (keine Server-Infrastruktur, alles lokal)
 
-### Tauri (Optional/Später)
+### Tauri Desktop App
 
-NoorSigner-Code bleibt erhalten, aber pausiert:
-- Reaktivieren wenn User "ohne Extension" wollen
-- Reaktivieren für Librem 5 falls keine Extensions verfügbar
-- Eventuell als separates Projekt für alle Nostr-Apps
+Native Desktop-App mit NoorSigner:
+- Volle Desktop-Integration
+- NoorSigner für lokales Key-Management
+- Keychain-Integration für sichere Speicherung
+- Native File-Dialoge
 
 ---
 
 ## Feature-Matrix
 
-| Feature | Browser | Tauri (optional) |
-|---------|---------|------------------|
+| Feature | Browser | Tauri |
+|---------|---------|-------|
 | **Auth** | | |
-| NIP-07 Extension | ✅ | ❌ |
-| NoorSigner | ❌ | ✅ |
-| Remote Signer (bunker://) | ✅ | ✅ |
-| npub (read-only) | ✅ | ✅ |
+| Browser Extension (NIP-07) | ✅ | ❌ |
+| NoorSigner (Lokaler Key Signer) | ❌ | ✅ |
+| Hardware Remote Signer (bunker://) | ✅ | ✅ |
 | **Storage** | | |
 | IndexedDB | ✅ | ✅ |
 | localStorage | ✅ | ✅ |
@@ -57,7 +59,7 @@ NoorSigner-Code bleibt erhalten, aber pausiert:
 
 ## PlatformService
 
-Zentrale Platform-Erkennung - relevant für Tauri-Option.
+Zentrale Platform-Erkennung für beide Modi.
 
 ### Interface
 
@@ -199,7 +201,7 @@ Bei jedem Git-Tag (`v*`) wird automatisch:
 
 ## Offene Fragen
 
-- [ ] Librem 5: Gibt es Browser-Extensions? Falls nein → Tauri reaktivieren
+- [ ] Librem 5: Gibt es Browser-Extensions? Falls nein → nur Tauri
 - [ ] NoorSigner als separates Projekt für andere Nostr-Apps?
 
 ---

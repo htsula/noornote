@@ -9,12 +9,26 @@ Enable multiple account management in NoorNote so users can switch between accou
 Before implementing, read and understand:
 
 1. **`src/services/AuthService.ts`** - Current auth logic, session storage, auth methods
-2. **`src/services/KeychainStorage.ts`** - Secure nsec storage (Keychain/IndexedDB fallback)
+2. **`src/services/KeychainStorage.ts`** - Secure storage (Keychain/IndexedDB fallback)
 3. **`src/services/PlatformService.ts`** - Platform detection (Tauri vs Browser)
 4. **`src/components/ui/UserStatus.ts`** - Current user display component (to be replaced)
 5. **`src/components/layout/MainLayout.ts`** - Where UserStatus is integrated (lines 586-610, `.secondary-user` container)
 6. **`src/components/auth/AuthComponent.ts`** - Login UI (reused for "Add account")
-7. **`docs/todos/x-platform/platform-strategy.md`** - Browser-first strategy, feature matrix
+7. **`docs/todos/x-platform/platform-strategy.md`** - Dual-platform strategy, feature matrix
+
+## Auth Methods by Platform
+
+| Platform | Auth Method | nsec Storage? |
+|----------|-------------|---------------|
+| Browser | Browser Extension (NIP-07) | No (extension manages) |
+| Browser | Hardware Remote Signer (bunker://) | No (bunkerUri only) |
+| Tauri | NoorSigner (Local Key Signer) | No (daemon manages) |
+| Tauri | Hardware Remote Signer (bunker://) | No (bunkerUri only) |
+
+**Key insight:** No auth method requires nsec storage in AccountStorageService. Keys are managed by:
+- Extension (browser manages)
+- NoorSigner daemon (daemon manages)
+- Remote signer (bunkerUri stored, no secrets)
 
 ## UX Reference (Jumble/YakiHonne Pattern)
 
@@ -26,7 +40,7 @@ Before implementing, read and understand:
 │  SWITCH ACCOUNT             │
 │  ┌─────────────────────────┐│
 │  │ 👤 alice    [Remote] ●  ││  ← Active account
-│  │ 👤 bob      [Local]     ││  ← Other stored accounts
+│  │ 👤 bob      [Extension] ││  ← Other stored accounts
 │  │ + Add account           ││
 │  └─────────────────────────┘│
 │  ← Log out alice            │
@@ -35,9 +49,9 @@ Before implementing, read and understand:
 ```
 
 **Badges:**
-- `[Remote]` = NIP-46 bunker, Extension
-- `[Local]` = nsec stored locally
-- `[Read-only]` = npub only
+- `[Extension]` = NIP-07 Browser Extension (Browser only)
+- `[NoorSigner]` = Local Key Signer (Tauri only)
+- `[Remote]` = Hardware Remote Signer (bunker://)
 - `●` green dot = currently active
 
 ## Architecture Changes
@@ -48,15 +62,15 @@ Before implementing, read and understand:
 // src/services/AccountStorageService.ts
 
 interface StoredAccount {
-  pubkey: string;           // Unique identifier
-  npub: string;
-  authMethod: AuthMethod;   // 'nsec' | 'npub' | 'extension' | 'nip46' | 'key-signer'
+  pubkey: string;           // Unique identifier (hex)
+  npub: string;             // Bech32 format
+  authMethod: AuthMethod;   // 'extension' | 'nip46' | 'key-signer'
   displayName?: string;     // Cached from profile
   avatarUrl?: string;       // Cached from profile
   addedAt: number;          // Timestamp
   lastUsedAt: number;       // For sorting
   // Method-specific data:
-  bunkerUri?: string;       // For nip46
+  bunkerUri?: string;       // For nip46 (Hardware Remote Signer)
 }
 
 class AccountStorageService {
@@ -84,42 +98,7 @@ class AccountStorageService {
 
 **Storage Location:** localStorage (`noornote_accounts`)
 
-### 2. KeychainStorage Extension
-
-**Platform-Aware Storage:**
-- **Tauri:** Real Keychain (macOS Keychain, etc.) - secure
-- **Browser:** IndexedDB fallback - less secure but functional
-
-Most account types don't need nsec storage at all:
-| Account Type | nsec Storage Needed? |
-|--------------|---------------------|
-| NIP-07 Extension | ❌ No (extension manages keys) |
-| NoorSigner | ❌ No (daemon manages keys) |
-| Remote Signer (bunker://) | ❌ No (bunkerUri in localStorage, no secrets) |
-| Direct nsec | ✅ Yes (edge case, mostly Tauri users) |
-| npub (read-only) | ❌ No |
-
-```typescript
-// Extend KeychainStorage to support multiple nsecs
-
-// Current: Single key "noornote_nsec"
-// New: Key per account "noornote_nsec_{pubkey}"
-
-class KeychainStorage {
-  // Existing (keep for backward compat during migration)
-  static saveNsec(nsec: string): Promise<void>
-  static loadNsec(): Promise<string | null>
-
-  // NEW: Per-account nsec storage
-  static saveNsecForAccount(pubkey: string, nsec: string): Promise<void>
-  static loadNsecForAccount(pubkey: string): Promise<string | null>
-  static deleteNsecForAccount(pubkey: string): Promise<void>
-}
-```
-
-**Note:** KeychainStorage already handles platform detection via `PlatformService.isTauri`.
-
-### 3. AuthService Extension
+### 2. AuthService Extension
 
 ```typescript
 class AuthService {
@@ -138,13 +117,13 @@ class AuthService {
   async signOutAll(): Promise<void>
 
   // MODIFY: After successful login, also add to AccountStorageService
-  // authenticateWithNsec() → also calls accountStorage.addAccount()
+  // authenticate() → also calls accountStorage.addAccount()
   // authenticateWithBunker() → also calls accountStorage.addAccount()
-  // etc.
+  // authenticateWithKeySigner() → also calls accountStorage.addAccount()
 }
 ```
 
-### 4. AccountSwitcher Component (NEW)
+### 3. AccountSwitcher Component (NEW)
 
 Replaces `UserStatus` component with dropdown functionality.
 
@@ -180,7 +159,7 @@ class AccountSwitcher {
 
 **SCSS:** `src/styles/components/_account-switcher.scss`
 
-### 5. Profile Caching for Accounts
+### 4. Profile Caching for Accounts
 
 When switching accounts, cache basic profile info for display:
 
@@ -200,7 +179,6 @@ async function cacheAccountProfile(pubkey: string): Promise<void> {
 
 ### Phase 1: Storage Infrastructure
 - [ ] Create `AccountStorageService`
-- [ ] Extend `KeychainStorage` for per-account nsec
 - [ ] Add migration from old single-account storage
 
 ### Phase 2: AuthService Integration
@@ -220,16 +198,13 @@ async function cacheAccountProfile(pubkey: string): Promise<void> {
 - [ ] Handle auth method availability (extension not installed, etc.)
 - [ ] Error handling for expired bunker sessions
 - [ ] Keyboard navigation for dropdown
-- [ ] Mobile-friendly dropdown positioning
 
 ## Edge Cases & Considerations
 
 ### Auth Method Availability
 - **Extension**: May not be available → show as "unavailable" with option to remove
 - **NIP-46 Bunker**: Session may expire → need re-auth flow
-- **Key-Signer**: Daemon may not be running → show connection status
-- **nsec**: Always available (stored in Keychain)
-- **npub**: Always available (read-only)
+- **NoorSigner**: Daemon may not be running → show connection status
 
 ### Account Switch Flow
 1. User clicks different account
@@ -245,17 +220,15 @@ async function cacheAccountProfile(pubkey: string): Promise<void> {
 - Old unused accounts can be removed
 
 ### Security
-- nsec stored in Keychain (OS-level security)
 - bunkerUri stored in localStorage (contains no secrets)
-- Never show nsec in UI
-- "Remove account" should also delete nsec from Keychain
+- Never show sensitive data in UI
+- "Remove account" cleans up all related storage
 
 ## File Changes Summary
 
 | File | Change |
 |------|--------|
 | `src/services/AccountStorageService.ts` | NEW |
-| `src/services/KeychainStorage.ts` | Extend |
 | `src/services/AuthService.ts` | Extend |
 | `src/components/ui/AccountSwitcher.ts` | NEW (replaces UserStatus) |
 | `src/components/ui/UserStatus.ts` | DEPRECATED |
@@ -267,7 +240,7 @@ async function cacheAccountProfile(pubkey: string): Promise<void> {
 
 1. **Add second account**: Login → Add account → Login with different creds → Switch back
 2. **Switch accounts**: Should update timeline, profile, relay lists
-3. **Remove account**: Should delete from storage and Keychain
+3. **Remove account**: Should delete from storage
 4. **Extension unavailable**: After browser restart, extension account shows unavailable
 5. **Bunker expired**: NIP-46 account shows need to re-authenticate
 6. **Logout all**: Clears all accounts and returns to login view
@@ -306,22 +279,6 @@ public setUserStatus(npub: string, pubkey: string): void {
 - `setUserStatus()` method (line 586)
 - `clearUserStatus()` method (line 626)
 
-### KeychainStorage Key Pattern
-
-Current single-account pattern:
-```typescript
-KEY_NSEC = 'nsec'  // Keychain key: "noornote" + "nsec"
-```
-
-New multi-account pattern:
-```typescript
-// For account with pubkey "abc123..."
-KEY_NSEC_PREFIX = 'nsec_'  // Keychain key: "noornote" + "nsec_abc123..."
-```
-
-**Tauri Keychain:** Uses `setPassword(service, key, value)` where service="noornote"
-**Browser fallback:** Uses IndexedDB with key as identifier
-
 ### "Add Account" Navigation Flow
 
 1. User clicks "+ Add account" in AccountSwitcher dropdown
@@ -337,28 +294,24 @@ KEY_NSEC_PREFIX = 'nsec_'  // Keychain key: "noornote" + "nsec_abc123..."
 
 On first load after update:
 1. Check if old `noornote_auth_session` exists
-2. Check if old `nsec` key exists in Keychain
-3. If yes: Migrate to new format
+2. If yes: Migrate to new format
    - Create StoredAccount from session data
-   - Move nsec to new key pattern (`nsec_{pubkey}`)
-   - Delete old keys
-4. Set migration flag in localStorage to skip next time
+   - Add to AccountStorageService
+3. Set migration flag in localStorage to skip next time
 
 ```typescript
 // AccountStorageService
 private async migrateFromSingleAccount(): Promise<void> {
+  const migrationDone = localStorage.getItem('noornote_accounts_migration_done');
+  if (migrationDone) return;
+
   const oldSession = localStorage.getItem('noornote_auth_session');
-  if (!oldSession) return;
+  if (!oldSession) {
+    localStorage.setItem('noornote_accounts_migration_done', 'true');
+    return;
+  }
 
   const session = JSON.parse(oldSession);
-  if (session.authMethod === 'nsec') {
-    // Migrate nsec from old key to new key pattern
-    const oldNsec = await KeychainStorage.loadNsec();
-    if (oldNsec) {
-      await KeychainStorage.saveNsecForAccount(session.pubkey, oldNsec);
-      await KeychainStorage.deleteNsec(); // Delete old key
-    }
-  }
 
   // Add to accounts storage
   this.addAccount({
@@ -369,5 +322,6 @@ private async migrateFromSingleAccount(): Promise<void> {
     lastUsedAt: Date.now()
   });
 
-  localStorage.setItem('noornote_migration_done', 'true');
+  localStorage.setItem('noornote_accounts_migration_done', 'true');
 }
+```

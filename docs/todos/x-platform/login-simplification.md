@@ -2,32 +2,19 @@
 
 > **Siehe auch:** [Platform-Strategie](./platform-strategy.md) für Gesamtübersicht
 
-## Strategie: Browser-First
+## Strategie: Dual-Platform
 
-Login-Optionen für Browser-Version (alle Plattformen).
-Tauri-spezifische Optionen (NoorSigner) optional/später.
+Login-Optionen für beide Plattformen (Browser + Tauri) parallel entwickelt.
 
-## Aktuelle Login-Optionen
-- NoorSigner (KeySigner) - Tauri only
-- Remote Signer (NIP-46 bunker://)
-- Browser Extension (NIP-07)
-- Direct nsec
-- npub (read-only)
-- Neuen Keypair anlegen
+## Login-Optionen nach Plattform
 
-## Neue Login-Optionen
+### Browser (Rust-Server)
+1. **Browser Extension** - Alby, nos2x, etc. (NIP-07)
+2. **Hardware Remote Signer** - bunker:// URI (NIP-46)
 
-### Browser (alle Plattformen)
-1. **NIP-07 Extension** - Alby, nos2x, etc. (prominent)
-2. **Remote Signer** - bunker:// URI
-3. **npub** - Read-only Modus
-
-### Tauri (optional/später)
-1. **NoorSigner** - Lokaler Signer (prominent)
-2. **Remote Signer** - bunker:// URI
-3. **npub** - Read-only Modus
-
-> **Hinweis:** Direct nsec bleibt vorerst als Fallback, wird aber nicht prominent angezeigt.
+### Tauri Desktop
+1. **NoorSigner** - Lokaler Key Signer
+2. **Hardware Remote Signer** - bunker:// URI (NIP-46)
 
 ## Login-Screen UI
 
@@ -37,31 +24,28 @@ Tauri-spezifische Optionen (NoorSigner) optional/später.
 │       Welcome to NoorNote           │
 │                                     │
 │  ┌─────────────────────────────┐    │
-│  │  🔐 Login with Extension    │    │  ← NIP-07 prominent
+│  │  🔐 Login with Extension    │    │  ← Browser Extension (NIP-07)
 │  └─────────────────────────────┘    │
 │                                     │
 │  ─────── or ───────                 │
 │                                     │
-│  [ bunker://... ]  [Connect]        │  ← Remote Signer
-│                                     │
-│  [ npub1... ]      [View Only]      │  ← Read-only
+│  [ bunker://... ]  [Connect]        │  ← Hardware Remote Signer
 │                                     │
 └─────────────────────────────────────┘
 ```
 
-### Tauri-Modus (später)
+### Tauri-Modus
 ```
 ┌─────────────────────────────────────┐
 │       Welcome to NoorNote           │
 │                                     │
 │  ┌─────────────────────────────┐    │
-│  │  🔑 Use NoorSigner          │    │  ← NoorSigner prominent
+│  │  🔑 Use NoorSigner          │    │  ← Lokaler Key Signer
 │  └─────────────────────────────┘    │
 │                                     │
 │  ─────── or ───────                 │
 │                                     │
-│  [ bunker://... ]  [Connect]        │
-│  [ npub1... ]      [View Only]      │
+│  [ bunker://... ]  [Connect]        │  ← Hardware Remote Signer
 │                                     │
 └─────────────────────────────────────┘
 ```
