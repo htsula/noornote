@@ -71,6 +71,16 @@ export class FollowListSecondaryManager extends BaseListSecondaryManager<FollowI
     this.zapStatsService = ZapStatsService.getInstance();
     this.router = Router.getInstance();
 
+    // Additional user:login handler for follow-specific caches
+    this.eventBus.on('user:login', () => {
+      this.totalFollowing = 0;
+      this.mutualCount = 0;
+      this.zapStatsLoaded = false;
+      this.isFullyLoaded = false;
+      this.originalOrder = [];
+      this.usernameFilter = '';
+    });
+
     // Listen for zap stats loaded event
     this.eventBus.on('zapstats:loaded', () => {
       this.zapStatsLoaded = true;
