@@ -20,6 +20,7 @@ import { hexToNpub } from '../../../helpers/nip19';
 import { extractDisplayName } from '../../../helpers/extractDisplayName';
 import { ListSyncManager } from '../../../services/sync/ListSyncManager';
 import { FollowStorageAdapter } from '../../../services/sync/adapters/FollowStorageAdapter';
+import { RestoreListsService } from '../../../services/RestoreListsService';
 import { InfiniteScroll } from '../../ui/InfiniteScroll';
 import { ProgressBarHelper } from '../../../helpers/ProgressBarHelper';
 import { ArticleNotificationService } from '../../../services/ArticleNotificationService';
@@ -42,6 +43,7 @@ export class FollowListSecondaryManager extends BaseListSecondaryManager<FollowI
   private mutualService: MutualService;
   private zapStatsService: ZapStatsService;
   private router: Router;
+  private adapter: FollowStorageAdapter;
 
   // Stats and filter
   private totalFollowing: number = 0;
@@ -62,6 +64,7 @@ export class FollowListSecondaryManager extends BaseListSecondaryManager<FollowI
 
     super(containerElement, listSyncManager);
 
+    this.adapter = adapter;
     this.followOrch = FollowListOrchestrator.getInstance();
     this.userProfileService = UserProfileService.getInstance();
     this.mutualService = MutualService.getInstance();
@@ -112,17 +115,17 @@ export class FollowListSecondaryManager extends BaseListSecondaryManager<FollowI
     const currentUser = this.authService.getCurrentUser();
     if (!currentUser) throw new Error('User not authenticated');
 
-    // Read from browser storage (localStorage) - source of truth during session
-    let allFollows = this.listSyncManager['adapter'].getBrowserItems();
+    // Use RestoreListsService for cascading restore (browser → file → relays)
+    const restoreService = RestoreListsService.getInstance();
+    await restoreService.restoreIfEmpty(
+      this.listSyncManager,
+      () => this.adapter.getBrowserItems(),
+      (items) => this.adapter.setBrowserItems(items),
+      'Follows'
+    );
 
-    // If browser storage is empty, initialize from files (first load after migration)
-    if (allFollows.length === 0) {
-      const fileItems = await this.listSyncManager['adapter'].getFileItems();
-      if (fileItems.length > 0) {
-        this.listSyncManager['adapter'].setBrowserItems(fileItems);
-        allFollows = fileItems;
-      }
-    }
+    // Read from browser storage (localStorage) - source of truth during session
+    const allFollows = this.adapter.getBrowserItems();
 
     // Get public/private status from files (fallback for items without browser flag)
     const followStatus = await this.followOrch.getAllFollowsWithStatus();
