@@ -34,9 +34,16 @@
     - Feature erst abhaken wenn VOLLSTÄNDIG umgesetzt
     - Fertige Features: Todo-Datei nach `docs/features/` verschieben
     - Verweise auf Detail-Dateien aktuell halten
-9. And last but not least: 
+9. And last but not least:
    ⚠️ DON'T GUESS! DON'T GUESS! DON'T GUESS! DON'T GUESS! DON'T GUESS! DON'T GUESS! DON'T GUESS! DON'T GUESS!
       KNOW! ANALYZE. FIND OUT. LEARN. KNOW! ⚠️
+10. **⚠️ MANDATORY RESEARCH BEFORE CODING ⚠️:**
+    - BEFORE creating any new file: scan `src/services/` and `src/helpers/` for existing solutions
+    - BEFORE implementing a feature: find 2-3 similar implementations, READ them fully
+    - SHOW the user what you found ("Found ModalService, ZapModal uses it like X...")
+    - WAIT for user confirmation before writing code
+    - 90% research, 10% coding. Not the other way around.
+    - Violating this = wasted work that gets reverted
 
 **⚠️ BROWSER COMPATIBILITY:** NO `require()` in any browser-executed code! Use ES6 imports only. `require()` only works in Node.js.
 
@@ -86,6 +93,7 @@ Crypto functions use NostrToolsAdapter (wraps nostr-tools, NDK's peer dependency
 - No browser dialogs (use Modal Helper)
 - Colors: $color-1-6, interactive = $color-4 (pink)
 - Spacing: $gap-based (`calc($gap / 2)`, `$gap * 2`)
+- reuse existing CSS patterns in Atoms and Molecules, like _typography.scss, _buttons.scss, _tabs.scss etc. If you want to introduce new styles: ask. But before, verify, they don't exist yet.
 - Async: ErrorService (catch) + ToastService (success)
 - No TODOs, no deprecated SASS (use color.adjust)
 - App.ts = coordination only (business logic in components)

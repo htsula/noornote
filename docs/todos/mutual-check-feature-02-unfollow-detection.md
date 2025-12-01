@@ -8,6 +8,14 @@
 
 ---
 
+> ⚠️ **IMPLEMENTATION NOTE:** Phase 2, 3, and 4 are implemented together.
+> Storage uses the dual-layer architecture defined in Phase 4:
+> - **File** (`~/.noornote/{npub}/mutual-check-data.json`) = Source of Truth
+> - **localStorage** = Runtime cache
+> See `mutual-check-feature-04-automation.md` for full storage architecture.
+
+---
+
 ## Goal
 
 Detect when someone stops following you back by comparing snapshots over time.

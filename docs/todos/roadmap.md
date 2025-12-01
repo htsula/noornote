@@ -4,11 +4,9 @@ Priorisierte Reihenfolge aller Todos.
 
 ---
 
-## 1. Multi-User Integration vervollständigen
+## 1. Multi-User Integration ✅ ABGESCHLOSSEN
 
 **Datei:** `noorsigner-multi-account.md` (Phase 4)
-
-**Status:** ✅ FERTIG (nur noch Testen)
 
 **Erledigt:**
 - ✅ `switchAccount()` in KeySignerClient
@@ -22,9 +20,10 @@ Priorisierte Reihenfolge aller Todos.
 - ✅ AccountSwitcher Component (komplett implementiert)
 - ✅ AccountStorageService (komplett implementiert)
 - ✅ NoorSigner Daemon: alle IPC-Methoden vorhanden
-- ✅ "+ Add Account" Flow in AuthComponent (Titel + Flag-Handling)
+- ✅ "+ Add Account" Flow mit Terminal-Anleitung Modal
+- ✅ AuthComponent + AccountSwitcher aufgeräumt (nur NoorSigner + Bunker)
 
-**Aufwand verbleibend:** Testen
+**Getestet:** add-account, remove-account, switch-account
 
 ---
 
@@ -32,17 +31,32 @@ Priorisierte Reihenfolge aller Todos.
 
 **Dateien:** `mutual-check-*.md` (6 Dateien)
 
-**Status:** Geplant
+**Status:** Phase 1-4 implementiert - UNTER BEOBACHTUNG (Langzeit-Test)
 
 **Phasen:**
-1. Static Mutuals List (4-6h) - MVP
-2. Unfollow Detection (2-3h) - Manual
-3. New Mutual Detection (1-2h) - Manual
-4. Background Scheduler + Notifications (4-5h) - Automation
+1. ✅ Static Mutuals List - Mutual/Not following back Tags, Zähler, Filter
+2. ✅ Unfollow Detection - Wer hat mich entfolgt?
+3. ✅ New Mutual Detection - Wer folgt mir neu?
+4. ✅ Background Scheduler + Notifications - Automatische Benachrichtigungen
 
-**Aufwand:** ~12-16h für Phasen 1-4
+**Implementierte Architektur:**
+- Storage: `~/.noornote/{npub}/mutual-check-data.json` + localStorage
+- Scheduler: Verzögerter Start (3 Min nach App-Start)
+- Notifications: Integration in NV (mutual_unfollow, mutual_new)
+- Check-Intervall: Alle 4 Stunden
+- UI: "Check for Changes" Link, Modal, Green Dot in Sidebar
 
-**Value:** Hoher User-Value, zeigt wer nicht zurückfolgt
+**Neue Dateien:**
+- `src/services/storage/MutualChangeStorage.ts`
+- `src/services/MutualChangeDetector.ts`
+- `src/services/MutualChangeScheduler.ts`
+
+**Debug-Commands (DevTools):**
+- `__MUTUAL_CHANGE_STORAGE__.logState()` - Zeigt aktuellen State
+- `__MUTUAL_CHANGE_SCHEDULER__.forceCheck()` - Manueller Check
+- `__MUTUAL_CHANGE_SCHEDULER__.getStatus()` - Scheduler Status
+
+**Value:** Hoher User-Value, Langzeit-Test erforderlich
 
 ---
 
@@ -161,12 +175,21 @@ Priorisierte Reihenfolge aller Todos.
 
 ---
 
+## Release-Notizen (für später)
+
+**NoorSigner Installation:**
+- NoorSigner nach `/usr/local/bin/noorsigner` installieren (nicht gebündelt in App)
+- `key_signer.rs`: Production-Pfad ist bereits `/usr/local/bin/noorsigner`
+- `tauri.conf.json`: resources array leeren wenn nicht mehr gebündelt
+
+---
+
 ## Zusammenfassung
 
 | # | Feature | Aufwand | Status |
 |---|---------|---------|--------|
-| 1 | Multi-User Integration | Testen | ✅ Fertig |
-| 2 | Mutual Check (Phase 1-4) | 12-16h | ⬜ Offen |
+| 1 | Multi-User Integration | - | ✅ Abgeschlossen |
+| 2 | Mutual Check (Phase 2-4) | - | 🔍 Unter Beobachtung (Langzeit-Test) |
 | 3 | Logged-Out Features | 8-12h | ⬜ Offen |
 | 4 | Legal Page | 2h | ⬜ Offen |
 | 5 | Zap Display Fix | 2-4h | ⬜ Offen |

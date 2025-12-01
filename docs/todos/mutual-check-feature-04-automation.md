@@ -10,7 +10,7 @@
 
 ## Goal
 
-Automate the mutual checking process with daily background jobs and integrate with the notification system.
+Automate the mutual checking process with background jobs and integrate with the **existing notification system** (NotificationsView).
 
 **User Value:** "I want to be automatically notified when my mutual relationships change, without having to remember to check manually."
 
@@ -19,54 +19,218 @@ Automate the mutual checking process with daily background jobs and integrate wi
 ## Scope
 
 ### In Scope
-- ✅ Background scheduler (runs once per 24 hours)
+- ✅ Background scheduler (runs once per 4-5 hours)
+- ✅ **Delayed start: 2-5 minutes after app startup** (not immediate)
 - ✅ Automatic snapshot comparison
-- ✅ Synthetic notifications (locally generated)
+- ✅ **Integration with existing NotificationsOrchestrator** (like Likes/Zaps)
 - ✅ Dual-indicator system:
-  - Notification in NotificationView
-  - Green dot in sidebar ("Lists → Mutuals")
-- ✅ Integration with existing notification system
+  - Notification in NotificationView (NV) - mixed with Zaps/Likes
+  - Green dot in sidebar ("Follows" tab)
+- ✅ **Persistent file storage** (`~/.noornote/{npub}/mutual-check-data.json`)
 - ✅ Lifecycle management (start on login, stop on logout)
 
 ### Out of Scope
 - ❌ Reciprocity analysis (Phase 5)
 - ❌ Strength scoring (Phase 6)
-- ❌ Real-time detection (stays 24h interval)
+- ❌ Real-time detection (stays interval-based)
+
+---
+
+## ⚠️ CRITICAL: Storage Architecture
+
+**Problem:** localStorage can be cleared by user → data loss
+
+**Solution:** Dual-layer storage with file as Source of Truth
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    STORAGE FLOW                         │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  ~/.noornote/{npub}/mutual-check-data.json             │
+│  ════════════════════════════════════════              │
+│           ↑ Write after check          ↓ Read on start │
+│           │                            │               │
+│           │                            ▼               │
+│       ┌───┴────────────────────────────────┐          │
+│       │         localStorage               │          │
+│       │   (Runtime cache for fast access)  │          │
+│       └────────────────────────────────────┘          │
+│                        ↑                              │
+│                        │                              │
+│               MutualChangeStorage                     │
+│               (Single API for both)                   │
+│                                                        │
+└─────────────────────────────────────────────────────────┘
+```
+
+### File Structure
+
+```json
+// ~/.noornote/npub1abc.../mutual-check-data.json
+{
+  "version": 1,
+  "snapshot": {
+    "timestamp": 1701388800000,
+    "mutualPubkeys": ["pubkey1", "pubkey2", ...]
+  },
+  "lastCheckTimestamp": 1701388800000,
+  "unseenChanges": true,
+  "changes": [
+    { "pubkey": "abc", "type": "unfollow", "detectedAt": 1701388800000 },
+    { "pubkey": "def", "type": "new_mutual", "detectedAt": 1701388800000 }
+  ],
+  "checkHistory": [
+    { "timestamp": 1701388800000, "unfollowCount": 1, "newMutualCount": 2, "durationMs": 5400 }
+  ]
+}
+```
+
+### Startup Flow
+
+```
+App Start
+    │
+    ├─► 1. User Login
+    │
+    ├─► 2. Read file → localStorage (MutualChangeStorage.initFromFile())
+    │       - If file exists: populate localStorage
+    │       - If file missing: first run, localStorage stays empty
+    │
+    ├─► 3. Start other services (Timeline, Notifications, etc.)
+    │
+    └─► 4. setTimeout(startScheduler, 2-5 minutes)
+            │
+            └─► Scheduler checks if due, runs if needed
+```
+
+---
+
+## ⚠️ CRITICAL: Scheduler Timing
+
+**Why delayed start?**
+- Heavy operation (fetches Kind:3 from relays for ALL follows)
+- User may just quickly open app to check something
+- Avoid unnecessary load on startup
+
+**Implementation:**
+```typescript
+// In App.ts handleUserLogin()
+const SCHEDULER_DELAY_MS = 3 * 60 * 1000; // 3 minutes
+
+setTimeout(async () => {
+  const scheduler = MutualChangeScheduler.getInstance();
+  await scheduler.start();
+}, SCHEDULER_DELAY_MS);
+```
+
+**Consequence:**
+- User opens app for <3 min → No check runs → That's OK
+- User has app open >3 min → Check runs if due → "Tolle Überraschung"
+
+---
+
+## ⚠️ CRITICAL: Notification Integration
+
+**NOT a separate SyntheticNotificationService!**
+
+**Instead:** Inject into existing `NotificationsOrchestrator` as synthetic events.
+
+### NotificationType Extension
+
+```typescript
+// In NotificationsOrchestrator.ts
+export type NotificationType =
+  | 'mention' | 'reply' | 'thread-reply' | 'repost' | 'reaction' | 'zap' | 'article'
+  | 'mutual_unfollow'   // NEW: Someone stopped following back
+  | 'mutual_new';       // NEW: Someone started following back
+```
+
+### Synthetic Event Injection
+
+```typescript
+// MutualChangeDetector creates synthetic NostrEvents
+// These get injected into NotificationsOrchestrator
+
+const syntheticEvent: NostrEvent = {
+  id: `mutual-unfollow-${Date.now()}`,
+  pubkey: unfollowerPubkey, // The person who unfollowed
+  kind: 99001, // Custom kind for mutual changes (not published to relays)
+  created_at: Math.floor(Date.now() / 1000),
+  tags: [
+    ['type', 'mutual_unfollow'], // or 'mutual_new'
+    ['p', currentUserPubkey]
+  ],
+  content: '',
+  sig: '' // Empty - synthetic event
+};
+
+// Inject into NotificationsOrchestrator
+notificationsOrch.injectSyntheticNotification(syntheticEvent, 'mutual_unfollow');
+```
+
+### NotificationsView Rendering
+
+Mutual notifications appear in NV alongside Zaps/Likes:
+
+```
+┌────────────────────────────────────────────────┐
+│ 🔔 Notifications                               │
+├────────────────────────────────────────────────┤
+│ ⚡ alice zapped your note (1000 sats)    2h    │
+│ ❤️ bob liked your note                   3h    │
+│ ⚠️ charlie stopped following back        5h    │  ← Mutual notification
+│ ✅ dana started following you back!      1d    │  ← Mutual notification
+│ 💬 eve replied to your note              1d    │
+└────────────────────────────────────────────────┘
+```
 
 ---
 
 ## User Stories
 
-### Story 1: Automatic Daily Checks
+### Story 1: Delayed Automatic Checks
 ```
 As a user,
-The app should automatically check for mutual changes once per day,
-So I don't have to remember to check manually.
+The app should check for mutual changes after I've had it open for a few minutes,
+So I get notified without impacting startup performance.
 ```
 
 **Acceptance Criteria:**
-- [ ] Background job runs automatically
-- [ ] Runs once every 24 hours
-- [ ] Silent (no UI indication during check)
-- [ ] Batched relay requests (performance-friendly)
-- [ ] Works even if app was closed for multiple days
+- [ ] Scheduler starts 2-5 minutes after login (not immediately)
+- [ ] Check runs once every 4-5 hours (if app stays open)
+- [ ] Check runs on next eligible startup if app was closed
+- [ ] Silent background operation (no UI during check)
 
-### Story 2: Notification Integration
+### Story 2: Notification in NV
 ```
 As a user,
-When changes are detected, I want to see a notification,
+When changes are detected, I want to see them in my Notifications,
 So I'm informed just like with Zaps or Replies.
 ```
 
 **Acceptance Criteria:**
-- [ ] Notification appears in NotificationView
-- [ ] Mixed with regular Nostr notifications
-- [ ] Shows summary: "2 users stopped following back"
-- [ ] Shows summary: "alice started following you back!"
-- [ ] Marked as unread, increments notification badge
-- [ ] Marked as read when NotificationView opened
+- [ ] Mutual notifications appear in NotificationsView
+- [ ] Mixed chronologically with Zaps/Likes/Replies
+- [ ] Unfollow: "⚠️ alice stopped following back"
+- [ ] New mutual: "✅ bob started following you back!"
+- [ ] Clicking notification navigates to Follows tab
+- [ ] Badge count includes mutual notifications
 
-### Story 3: Sidebar Green Dot
+### Story 3: Persistent Storage
+```
+As a user,
+I want my mutual check data to survive browser cache clearing,
+So I don't lose my change history.
+```
+
+**Acceptance Criteria:**
+- [ ] Data stored in `~/.noornote/{npub}/mutual-check-data.json`
+- [ ] File read into localStorage on app startup
+- [ ] File updated after each check
+- [ ] localStorage used as runtime cache
+
+### Story 4: Sidebar Green Dot
 ```
 As a user,
 I want a persistent indicator in the sidebar when changes occur,
@@ -74,24 +238,10 @@ So I don't miss changes even if I dismiss the notification.
 ```
 
 **Acceptance Criteria:**
-- [ ] Green dot appears next to "Lists → Mutuals"
+- [ ] Green dot appears next to "Follows" tab
 - [ ] Persists even after notification is read
-- [ ] Disappears only when user opens Mutuals tab
-- [ ] Pulsing animation (visually distinct)
-- [ ] State persists across app restarts
-
-### Story 4: "View Details" Action
-```
-As a user,
-I want to click the notification to see full details,
-So I can quickly review all changes.
-```
-
-**Acceptance Criteria:**
-- [ ] "View Details" button in notification
-- [ ] Clicking navigates to Mutuals tab
-- [ ] Automatically shows changes (as if "Check for Changes" clicked)
-- [ ] Green dot clears after viewing
+- [ ] Disappears only when user opens Follows tab
+- [ ] State persists across app restarts (via file)
 
 ---
 
@@ -99,272 +249,91 @@ So I can quickly review all changes.
 
 ### New Services
 
-**1. SyntheticNotificationService**
+**1. MutualChangeStorage** (handles dual-layer storage)
 
 ```typescript
-// src/services/SyntheticNotificationService.ts
+// src/services/storage/MutualChangeStorage.ts
 
-export interface SyntheticNotification {
-  id: string;
-  type: 'mutual_unfollow' | 'mutual_new';
-  timestamp: number;
-  seen: boolean;
-  data: {
-    pubkeys: string[];
-    count: number;
-  };
+export class MutualChangeStorage {
+  private static instance: MutualChangeStorage;
+
+  // File path: ~/.noornote/{npub}/mutual-check-data.json
+  private getFilePath(): string { ... }
+
+  /**
+   * Initialize from file on app startup
+   * MUST be called BEFORE scheduler starts
+   */
+  async initFromFile(): Promise<void> {
+    const data = await this.readFile();
+    if (data) {
+      this.populateLocalStorage(data);
+    }
+  }
+
+  /**
+   * Save to both localStorage AND file
+   */
+  async save(): Promise<void> {
+    const data = this.collectFromLocalStorage();
+    await this.writeFile(data);
+  }
+
+  // ... getSnapshot, saveSnapshot, getChanges, etc.
 }
+```
 
-export class SyntheticNotificationService {
-  private static instance: SyntheticNotificationService;
-  private readonly STORAGE_KEY = 'noornote_synthetic_notifications';
-  private eventBus: EventBus;
+**2. MutualChangeDetector** (comparison logic)
 
-  public static getInstance(): SyntheticNotificationService {
-    if (!SyntheticNotificationService.instance) {
-      SyntheticNotificationService.instance = new SyntheticNotificationService();
-    }
-    return SyntheticNotificationService.instance;
-  }
+```typescript
+// src/services/MutualChangeDetector.ts
 
-  private constructor() {
-    this.eventBus = EventBus.getInstance();
-  }
-
+export class MutualChangeDetector {
   /**
-   * Create new mutual notification
+   * Perform comparison and create notifications
+   * Returns detected changes
    */
-  createNewMutualNotification(pubkeys: string[]): void {
-    const notification: SyntheticNotification = {
-      id: `mutual-new-${Date.now()}`,
-      type: 'mutual_new',
-      timestamp: Math.floor(Date.now() / 1000),
-      seen: false,
-      data: { pubkeys, count: pubkeys.length }
-    };
-
-    this.saveNotification(notification);
-    this.eventBus.emit('notification:new', notification);
-  }
-
-  /**
-   * Create unfollow notification
-   */
-  createUnfollowNotification(pubkeys: string[]): void {
-    const notification: SyntheticNotification = {
-      id: `mutual-unfollow-${Date.now()}`,
-      type: 'mutual_unfollow',
-      timestamp: Math.floor(Date.now() / 1000),
-      seen: false,
-      data: { pubkeys, count: pubkeys.length }
-    };
-
-    this.saveNotification(notification);
-    this.eventBus.emit('notification:new', notification);
-  }
-
-  private saveNotification(notif: SyntheticNotification): void {
-    const existing = this.getAll();
-    existing.unshift(notif);
-    const trimmed = existing.slice(0, 100);
-    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(trimmed));
-  }
-
-  getAll(): SyntheticNotification[] {
-    const stored = localStorage.getItem(this.STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
-  }
-
-  markAsSeen(id: string): void {
-    const all = this.getAll();
-    const notif = all.find(n => n.id === id);
-    if (notif) {
-      notif.seen = true;
-      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(all));
-      this.eventBus.emit('notifications:updated');
-    }
-  }
-
-  getUnreadCount(): number {
-    return this.getAll().filter(n => !n.seen).length;
+  async detect(): Promise<{ unfollows: string[], newMutuals: string[] }> {
+    // 1. Get current mutuals from MutualService
+    // 2. Get previous snapshot from MutualChangeStorage
+    // 3. Compare and find changes
+    // 4. Inject synthetic notifications into NotificationsOrchestrator
+    // 5. Save new snapshot
+    // 6. Return changes for logging
   }
 }
 ```
 
-**Effort:** 1 hour
-
----
-
-**2. MutualCheckScheduler**
+**3. MutualChangeScheduler** (background job)
 
 ```typescript
-// src/services/MutualCheckScheduler.ts
+// src/services/MutualChangeScheduler.ts
 
-import { MutualOrchestrator } from './orchestration/MutualOrchestrator';
-import { MutualCheckStorage } from './storage/MutualCheckStorage';
-import { SyntheticNotificationService } from './SyntheticNotificationService';
-import { AuthService } from './AuthService';
-
-export class MutualCheckScheduler {
-  private static instance: MutualCheckScheduler;
+export class MutualChangeScheduler {
   private checkInterval: NodeJS.Timeout | null = null;
-  private mutualOrch: MutualOrchestrator;
-  private storage: MutualCheckStorage;
-  private syntheticNotifService: SyntheticNotificationService;
-  private authService: AuthService;
-  private isRunning: boolean = false;
+  private readonly CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
 
-  private constructor() {
-    this.mutualOrch = MutualOrchestrator.getInstance();
-    this.storage = MutualCheckStorage.getInstance();
-    this.syntheticNotifService = SyntheticNotificationService.getInstance();
-    this.authService = AuthService.getInstance();
-  }
-
-  public static getInstance(): MutualCheckScheduler {
-    if (!MutualCheckScheduler.instance) {
-      MutualCheckScheduler.instance = new MutualCheckScheduler();
-    }
-    return MutualCheckScheduler.instance;
-  }
-
+  /**
+   * Start scheduler (called 2-5 min after login)
+   */
   async start(): Promise<void> {
-    if (this.isRunning) return;
-    if (!this.authService.getCurrentUser()) return;
-
-    this.isRunning = true;
-    console.log('[MutualCheckScheduler] Starting...');
-
     // Check immediately if due
     await this.checkIfDue();
 
-    // Then check every hour
-    this.checkInterval = setInterval(async () => {
-      await this.checkIfDue();
-    }, 60 * 60 * 1000);
-  }
-
-  stop(): void {
-    if (this.checkInterval) {
-      clearInterval(this.checkInterval);
-      this.checkInterval = null;
-    }
-    this.isRunning = false;
-    console.log('[MutualCheckScheduler] Stopped');
+    // Then check every 4 hours
+    this.checkInterval = setInterval(() => this.checkIfDue(), this.CHECK_INTERVAL_MS);
   }
 
   private async checkIfDue(): Promise<void> {
-    if (!this.authService.getCurrentUser()) {
-      this.stop();
-      return;
-    }
-
-    const lastCheck = this.storage.getLastCheckTimestamp();
+    const lastCheck = storage.getLastCheckTimestamp();
     const now = Date.now();
-    const twentyFourHours = 24 * 60 * 60 * 1000;
 
-    if (!lastCheck || (now - lastCheck) > twentyFourHours) {
-      console.log('[MutualCheckScheduler] 24h passed, starting check...');
-      await this.performCheck();
-    } else {
-      const nextCheck = new Date(lastCheck + twentyFourHours);
-      console.log(`[MutualCheckScheduler] Next check: ${nextCheck.toLocaleString()}`);
+    if (!lastCheck || (now - lastCheck) > this.CHECK_INTERVAL_MS) {
+      await this.detector.detect();
     }
-  }
-
-  private async performCheck(): Promise<void> {
-    console.log('[MutualCheckScheduler] Starting background check...');
-    const startTime = Date.now();
-
-    try {
-      // Get current mutuals
-      const mutualsStatus = await this.mutualOrch.getAllMutualsStatus();
-      const currentMutuals = mutualsStatus
-        .filter(m => m.isMutual)
-        .map(m => m.pubkey);
-
-      // Get previous snapshot
-      const snapshot = this.storage.getSnapshot();
-      const previousMutuals = snapshot ? snapshot.mutualPubkeys : [];
-
-      // Find changes
-      const newMutuals = currentMutuals.filter(
-        pubkey => !previousMutuals.includes(pubkey)
-      );
-
-      const unfollowers = previousMutuals.filter(
-        pubkey => !currentMutuals.includes(pubkey)
-      );
-
-      console.log(`[MutualCheckScheduler] Changes: +${newMutuals.length} new, -${unfollowers.length} lost`);
-
-      // Create notifications
-      let hasChanges = false;
-
-      if (newMutuals.length > 0) {
-        this.syntheticNotifService.createNewMutualNotification(newMutuals);
-        hasChanges = true;
-      }
-
-      if (unfollowers.length > 0) {
-        this.syntheticNotifService.createUnfollowNotification(unfollowers);
-        hasChanges = true;
-      }
-
-      // Mark as having unseen changes (green dot)
-      if (hasChanges) {
-        this.storage.markHasChanges();
-      }
-
-      // Save new snapshot
-      this.storage.saveSnapshot(currentMutuals);
-
-      const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-      console.log(`[MutualCheckScheduler] Check completed in ${duration}s`);
-    } catch (error) {
-      console.error('[MutualCheckScheduler] Check failed:', error);
-    }
-  }
-
-  async forceCheck(): Promise<void> {
-    await this.performCheck();
   }
 }
 ```
-
-**Effort:** 1.5 hours
-
----
-
-### Updated MutualCheckStorage
-
-```typescript
-// Add to existing MutualCheckStorage.ts
-
-export class MutualCheckStorage {
-  private readonly UNSEEN_CHANGES_KEY = 'noornote_mutual_unseen_changes';
-
-  hasUnseenChanges(): boolean {
-    return localStorage.getItem(this.UNSEEN_CHANGES_KEY) === 'true';
-  }
-
-  markHasChanges(): void {
-    localStorage.setItem(this.UNSEEN_CHANGES_KEY, 'true');
-  }
-
-  markChangesAsSeen(): void {
-    localStorage.removeItem(this.UNSEEN_CHANGES_KEY);
-  }
-
-  clear(): void {
-    localStorage.removeItem(this.LAST_CHECK_KEY);
-    localStorage.removeItem(this.SNAPSHOT_KEY);
-    localStorage.removeItem(this.UNSEEN_CHANGES_KEY);
-  }
-}
-```
-
-**Effort:** 15 minutes
 
 ---
 
@@ -373,202 +342,56 @@ export class MutualCheckStorage {
 ```typescript
 // src/App.ts
 
-import { MutualCheckScheduler } from './services/MutualCheckScheduler';
-import { MutualCheckStorage } from './services/storage/MutualCheckStorage';
+private async handleUserLogin(data: { npub: string; pubkey: string }): Promise<void> {
+  // ... existing code ...
 
-export class App {
-  private mutualCheckScheduler: MutualCheckScheduler | null = null;
+  // Initialize mutual change storage from file FIRST
+  const { MutualChangeStorage } = await import('./services/storage/MutualChangeStorage');
+  const mutualStorage = MutualChangeStorage.getInstance();
+  await mutualStorage.initFromFile();
 
-  async initialize(): Promise<void> {
-    // ... existing initialization ...
+  // Start scheduler DELAYED (2-5 minutes)
+  const SCHEDULER_DELAY_MS = 3 * 60 * 1000; // 3 minutes
 
-    // Start mutual check scheduler (only if logged in)
-    if (this.authService.getCurrentUser()) {
-      this.mutualCheckScheduler = MutualCheckScheduler.getInstance();
-      await this.mutualCheckScheduler.start();
-    }
-
-    // Listen for login/logout events
-    this.eventBus.on('user:login', async () => {
-      if (!this.mutualCheckScheduler) {
-        this.mutualCheckScheduler = MutualCheckScheduler.getInstance();
-      }
-      await this.mutualCheckScheduler.start();
-    });
-
-    this.eventBus.on('user:logout', () => {
-      this.mutualCheckScheduler?.stop();
-      MutualCheckStorage.getInstance().clear();
-    });
-  }
+  setTimeout(async () => {
+    const { MutualChangeScheduler } = await import('./services/MutualChangeScheduler');
+    const scheduler = MutualChangeScheduler.getInstance();
+    await scheduler.start();
+    console.log('[App] MutualChangeScheduler started (delayed)');
+  }, SCHEDULER_DELAY_MS);
 }
 ```
 
-**Effort:** 15 minutes
-
 ---
 
-### MainLayout Sidebar Integration
+### NotificationsOrchestrator Integration
 
 ```typescript
-// src/components/layout/MainLayout.ts
+// Add to NotificationsOrchestrator.ts
 
-import { MutualCheckStorage } from '../../services/storage/MutualCheckStorage';
+/**
+ * Inject a synthetic notification (not from relays)
+ * Used by MutualChangeDetector for mutual change notifications
+ */
+public injectSyntheticNotification(event: NostrEvent, type: NotificationType): void {
+  const notification: NotificationEvent = {
+    event,
+    type,
+    timestamp: event.created_at
+  };
 
-export class MainLayout {
-  private mutualCheckStorage: MutualCheckStorage;
+  // Add to notifications (avoid duplicates)
+  const exists = this.notifications.some(n => n.event.id === event.id);
+  if (!exists) {
+    this.notifications.push(notification);
+    this.notifications.sort((a, b) => b.timestamp - a.timestamp);
 
-  constructor() {
-    // ... existing code ...
-    this.mutualCheckStorage = MutualCheckStorage.getInstance();
-
-    // Listen for mutual changes
-    this.eventBus.on('notification:new', () => {
-      this.updateMutualsIndicator();
-    });
-  }
-
-  private renderListsSection(): string {
-    const hasUnseenChanges = this.mutualCheckStorage.hasUnseenChanges();
-
-    return `
-      <div class="sidebar-section">
-        <h3 class="sidebar-section-title">Lists</h3>
-        <button class="sidebar-item" data-tab="mutuals">
-          <span class="sidebar-item-icon">🔄</span>
-          <span class="sidebar-item-label">Mutuals</span>
-          ${hasUnseenChanges ? '<span class="status-indicator status-indicator--green"></span>' : ''}
-        </button>
-        <!-- ... other items ... -->
-      </div>
-    `;
-  }
-
-  private handleTabSwitch(tabName: string): void {
-    if (tabName === 'mutuals') {
-      this.mutualCheckStorage.markChangesAsSeen();
-      this.updateMutualsIndicator();
-      // ... existing mutual tab rendering ...
-    }
-  }
-
-  private updateMutualsIndicator(): void {
-    const mutualsTab = this.container.querySelector('[data-tab="mutuals"]');
-    if (!mutualsTab) return;
-
-    const hasUnseenChanges = this.mutualCheckStorage.hasUnseenChanges();
-    const existingIndicator = mutualsTab.querySelector('.status-indicator');
-
-    if (hasUnseenChanges && !existingIndicator) {
-      const indicator = document.createElement('span');
-      indicator.className = 'status-indicator status-indicator--green';
-      mutualsTab.appendChild(indicator);
-    } else if (!hasUnseenChanges && existingIndicator) {
-      existingIndicator.remove();
-    }
+    // Emit updates
+    this.eventBus.emit('notifications:badge-update');
+    this.eventBus.emit('notifications:new', { notification });
   }
 }
 ```
-
-**Effort:** 30 minutes
-
----
-
-### NotificationView Rendering
-
-**Note:** This is a simplified version. Full integration requires updating NotificationsOrchestrator and NotificationGroup types.
-
-```typescript
-// Add to NotificationsView.ts
-
-private renderMutualNotification(group: NotificationGroup): string {
-  const { type, metadata } = group;
-  const { pubkeys, count } = metadata;
-
-  // Fetch usernames (simplified - actual implementation needs async)
-  const usernames = this.getUsernamesFromPubkeys(pubkeys.slice(0, 2));
-
-  let message: string;
-  let iconClass: string;
-
-  if (type === 'mutual_new') {
-    iconClass = 'notification-icon--success';
-    if (count === 1) {
-      message = `${usernames[0]} started following you back!`;
-    } else {
-      message = `${usernames[0]} and ${count - 1} others started following you back!`;
-    }
-  } else {
-    iconClass = 'notification-icon--warning';
-    if (count === 1) {
-      message = `${usernames[0]} stopped following back`;
-    } else {
-      message = `${usernames[0]} and ${count - 1} others stopped following back`;
-    }
-  }
-
-  return `
-    <div class="notification-item notification-item--mutual">
-      <div class="notification-icon ${iconClass}">...</div>
-      <div class="notification-content">
-        <p>${message}</p>
-      </div>
-      <button class="btn btn--small" data-action="view-mutuals">
-        View Details
-      </button>
-    </div>
-  `;
-}
-```
-
-**Effort:** 1 hour (full integration with NotificationsOrchestrator)
-
----
-
-### SCSS Additions
-
-```scss
-// src/styles/components/_sidebar.scss
-
-.status-indicator {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  display: inline-block;
-  margin-left: calc($gap / 2);
-
-  &--green {
-    background: #10b981;
-    box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
-    animation: pulse-green 2s ease-in-out infinite;
-  }
-}
-
-@keyframes pulse-green {
-  0%, 100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.7;
-    transform: scale(0.95);
-  }
-}
-
-.sidebar-item {
-  display: flex;
-  align-items: center;
-  gap: calc($gap / 2);
-  position: relative;
-
-  .status-indicator {
-    position: absolute;
-    right: calc($gap / 2);
-  }
-}
-```
-
-**Effort:** 15 minutes
 
 ---
 
@@ -576,36 +399,36 @@ private renderMutualNotification(group: NotificationGroup): string {
 
 ### Manual Testing Checklist
 
-- [ ] App starts → Scheduler initializes
-- [ ] Verify initial check runs if >24h since last
-- [ ] Verify check skips if <24h since last
-- [ ] Force check via dev tools: `MutualCheckScheduler.getInstance().forceCheck()`
-- [ ] Verify notifications created
+- [ ] App starts → File read into localStorage
+- [ ] Wait 3+ minutes → Scheduler starts
+- [ ] Verify check runs if >4h since last
+- [ ] Force check via dev tools: `MutualChangeScheduler.getInstance().forceCheck()`
+- [ ] Verify notifications appear in NotificationsView
 - [ ] Verify notification badge increments
-- [ ] Verify green dot appears in sidebar
-- [ ] Open NotificationView → Notifications visible
-- [ ] Verify "View Details" button works
-- [ ] Open Mutuals tab → Green dot disappears
-- [ ] Logout → Verify scheduler stops
-- [ ] Login → Verify scheduler restarts
+- [ ] Verify green dot appears next to "Follows"
+- [ ] Open Follows tab → Green dot disappears
+- [ ] Clear localStorage → Restart app → Data restored from file
+- [ ] Logout → Scheduler stops
+- [ ] Login → Storage initialized, scheduler delayed
 
 ### Edge Cases
 
-- [ ] App closed for 3 days → Runs check on next open
+- [ ] First run (no file) → Creates initial snapshot, no notifications
+- [ ] App closed for 3 days → Runs check on next open (after delay)
 - [ ] No changes → No notifications, no green dot
 - [ ] Only new mutuals → Only positive notification
 - [ ] Only unfollows → Only negative notification
-- [ ] Both changes → Both notifications
+- [ ] Both changes → Both notifications (separate entries)
 
 ---
 
 ## Performance Considerations
 
 **Background Check:**
-- Runs once per 24 hours
-- Batched relay requests (same as manual check)
+- Runs once per 4-5 hours (if app open)
+- Delayed start (2-5 min after login)
+- Batched relay requests
 - Silent, non-blocking
-- Progress logged to console
 
 **For 100 followings:** ~5-8 seconds
 **For 500 followings:** ~30-60 seconds
@@ -616,13 +439,12 @@ private renderMutualNotification(group: NotificationGroup): string {
 
 ## Success Criteria
 
-- [ ] Scheduler runs automatically
-- [ ] Notifications integrate seamlessly
+- [ ] File storage works reliably
+- [ ] Scheduler delay prevents startup impact
+- [ ] Notifications appear in NV (like Zaps)
 - [ ] Green dot works correctly
-- [ ] No performance impact
 - [ ] No false positives
-- [ ] Users engage with notifications
-- [ ] Retention improvement measured
+- [ ] Data survives localStorage clearing
 
 ---
 
@@ -630,12 +452,7 @@ private renderMutualNotification(group: NotificationGroup): string {
 
 **Phase 5:** Add reciprocity check (zap asymmetry detection) 🔥
 
-**Dependencies for Phase 5:**
-- Phase 4 must be complete
-- User engagement with automation validated
-- Proof that users value the feature
-
 ---
 
-**Last Updated:** 2025-11-21
+**Last Updated:** 2025-12-01
 **Status:** Ready for Implementation

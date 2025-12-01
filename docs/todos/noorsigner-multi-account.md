@@ -178,17 +178,17 @@ class AccountStorageService {
 ## Implementation Checklist
 
 ### Phase 4 Tasks
-- [ ] KeySignerClient.ts: `listAccounts()` implementieren
-- [ ] KeySignerClient.ts: `addAccount()` implementieren
+- [x] KeySignerClient.ts: `listAccounts()` implementieren
+- [x] KeySignerClient.ts: `addAccount()` implementieren
 - [x] KeySignerClient.ts: `switchAccount()` implementieren ✅
-- [ ] KeySignerClient.ts: `removeAccount()` implementieren
-- [ ] KeySignerClient.ts: `getActiveAccount()` implementieren
-- [ ] AccountStorageService erstellen
-- [ ] AccountSwitcher Component erstellen
+- [x] KeySignerClient.ts: `removeAccount()` implementieren
+- [x] KeySignerClient.ts: `getActiveAccount()` implementieren
+- [x] AccountStorageService erstellen
+- [x] AccountSwitcher Component erstellen
 - [x] Passwort-Modal für Switch erstellen ✅
-- [ ] MainLayout: UserStatus → AccountSwitcher ersetzen
-- [ ] AuthComponent: `addAccount` Query-Param Support
-- [ ] SCSS für AccountSwitcher
+- [x] MainLayout: UserStatus → AccountSwitcher ersetzen
+- [x] AuthComponent: `addAccount` Query-Param Support
+- [x] SCSS für AccountSwitcher
 
 ### Zusätzlich erledigt (2024-11-30)
 - [x] Per-user file storage (`~/.noornote/{npub}/`) ✅
@@ -200,9 +200,9 @@ class AccountStorageService {
 ## Edge Cases
 
 ### Passwort-Handling
-- Jeder Account hat eigenes Passwort
-- Trust Session (24h) gilt pro Account separat
-- Bei Switch: Passwort-Prompt wenn Trust Session abgelaufen
+- Jeder Account hat eigenes Passwort ✅
+- Trust Session (24h) gilt pro Account separat ✅
+- Bei Switch: Passwort-Prompt wenn Trust Session abgelaufen ✅
 
 ### Account Switch
 1. Current session saved
