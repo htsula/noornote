@@ -47,9 +47,10 @@ Priorisierte Reihenfolge aller Todos.
 - UI: "Check for Changes" Link, Modal, Green Dot in Sidebar
 
 **Neue Dateien:**
-- `src/services/storage/MutualChangeStorage.ts`
+- `src/services/MutualChangeService.ts` (Self-initializing entry point)
 - `src/services/MutualChangeDetector.ts`
 - `src/services/MutualChangeScheduler.ts`
+- `src/services/storage/MutualChangeStorage.ts`
 
 **Debug-Commands (DevTools):**
 - `__MUTUAL_CHANGE_STORAGE__.logState()` - Zeigt aktuellen State

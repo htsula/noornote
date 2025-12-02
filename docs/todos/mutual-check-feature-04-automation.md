@@ -1,6 +1,6 @@
 # Phase 4: Background Scheduler + Notifications
 
-**Status:** Planned
+**Status:** ✅ IMPLEMENTED (2025-12-02)
 **Priority:** MEDIUM
 **Effort:** 4-5 hours
 **Dependencies:** Phase 2 + 3 complete
@@ -454,5 +454,37 @@ public injectSyntheticNotification(event: NostrEvent, type: NotificationType): v
 
 ---
 
-**Last Updated:** 2025-12-01
-**Status:** Ready for Implementation
+---
+
+## 🔧 Debug Helpers (DevTools Console)
+
+The following debug helpers are available in the browser console:
+
+```javascript
+// === MutualChangeStorage ===
+__MUTUAL_CHANGE_STORAGE__.logState()
+// Logs: Snapshot, Last Check, Unseen Changes, Changes array
+
+// === MutualChangeScheduler ===
+__MUTUAL_CHANGE_SCHEDULER__.getStatus()
+// Returns: { isRunning, lastCheckAttempt, lastSuccessfulCheck, nextCheckDue }
+
+__MUTUAL_CHANGE_SCHEDULER__.forceCheck()
+// Force immediate check (bypasses 4h interval) - useful for testing
+
+__MUTUAL_CHANGE_SCHEDULER__.stop()
+// Stop the scheduler manually
+```
+
+### Testing Flow
+
+1. Login and wait 3 minutes for scheduler to start
+2. Or use "Check for Changes" link in Follows tab (immediate, no delay)
+3. First check creates initial snapshot (no notifications)
+4. Second check compares with snapshot → detects changes
+5. Use `forceCheck()` to skip 4h wait during testing
+
+---
+
+**Last Updated:** 2025-12-02
+**Status:** ✅ Implemented
