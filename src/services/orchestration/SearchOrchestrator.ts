@@ -191,4 +191,64 @@ export class SearchOrchestrator extends Orchestrator {
 
     return events;
   }
+
+  /**
+   * Search for user profiles using NIP-50 (kind:0 metadata)
+   * Returns parsed profile objects
+   */
+  public async searchProfiles(query: string, limit: number = 10): Promise<ProfileSearchResult[]> {
+    if (!query || query.length < 2) {
+      return [];
+    }
+
+    const filter: Filter = {
+      kinds: [0], // Profile metadata
+      limit
+    };
+
+    // @ts-ignore - NIP-50 search field
+    filter.search = query;
+
+    const searchRelays = this.getSearchRelays();
+
+    this.systemLogger.info('SearchOrchestrator', `🔍 Searching profiles for: "${query}"`);
+
+    try {
+      const events = await this.transport.fetch(searchRelays, [filter], 5000);
+
+      // Parse profile events
+      const profiles: ProfileSearchResult[] = [];
+      for (const event of events) {
+        try {
+          const metadata = JSON.parse(event.content);
+          profiles.push({
+            pubkey: event.pubkey,
+            name: metadata.name,
+            display_name: metadata.display_name,
+            picture: metadata.picture,
+            nip05: metadata.nip05,
+            about: metadata.about
+          });
+        } catch {
+          // Skip invalid profile JSON
+        }
+      }
+
+      this.systemLogger.info('SearchOrchestrator', `✓ Found ${profiles.length} profiles`);
+      return profiles;
+    } catch (error) {
+      this.systemLogger.error('SearchOrchestrator', `Profile search failed: ${error}`);
+      return [];
+    }
+  }
+}
+
+/** Profile search result (subset of full profile) */
+export interface ProfileSearchResult {
+  pubkey: string;
+  name?: string;
+  display_name?: string;
+  picture?: string;
+  nip05?: string;
+  about?: string;
 }
