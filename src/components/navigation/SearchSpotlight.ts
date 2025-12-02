@@ -1,25 +1,40 @@
 /**
  * Search Spotlight
  * Spotlight-style modal for search and navigation
+ * Includes user search (local follows + remote NIP-50)
  */
 
 import { Router } from '../../services/Router';
 import { EventBus } from '../../services/EventBus';
+import { UserSearchService, type UserSearchResult } from '../../services/UserSearchService';
+import { hexToNpub } from '../../helpers/nip19';
+import { extractDisplayName } from '../../helpers/extractDisplayName';
 
 export class SearchSpotlight {
   private element: HTMLElement;
   private router: Router;
   private eventBus: EventBus;
+  private userSearchService: UserSearchService;
   private isOpen: boolean = false;
   private inputElement: HTMLInputElement | null = null;
+  private userSuggestionsElement: HTMLElement | null = null;
   private suggestionsElement: HTMLElement | null = null;
   private recentURLs: string[] = [];
   private escHandler: ((e: KeyboardEvent) => void) | null = null;
   private selectedSuggestionIndex: number = -1;
 
+  /** Debounce timer for user search */
+  private searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private currentSearchController: AbortController | null = null;
+
+  /** Current user search results */
+  private userResults: UserSearchResult[] = [];
+  private isSearchingUsers: boolean = false;
+
   constructor() {
     this.router = Router.getInstance();
     this.eventBus = EventBus.getInstance();
+    this.userSearchService = UserSearchService.getInstance();
     this.element = this.createElement();
 
     // ESC handler with capture phase - fires BEFORE ModalService ESC handler
@@ -33,7 +48,6 @@ export class SearchSpotlight {
     document.addEventListener('keydown', this.escHandler, { capture: true });
 
     this.setupEventListeners();
-    // Don't append element here - only append on open()
   }
 
   private createElement(): HTMLElement {
@@ -66,6 +80,7 @@ export class SearchSpotlight {
             </svg>
           </button>
         </div>
+        <div class="search-spotlight__user-suggestions"></div>
         <div class="search-spotlight__suggestions"></div>
       </div>
     `;
@@ -98,8 +113,9 @@ export class SearchSpotlight {
 
       // Input changes for suggestions
       this.inputElement.addEventListener('input', () => {
-        this.selectedSuggestionIndex = -1; // Reset selection on input
+        this.selectedSuggestionIndex = -1;
         this.updateSuggestions();
+        this.debouncedUserSearch();
       });
     }
 
@@ -117,7 +133,10 @@ export class SearchSpotlight {
       this.updateNavigationButtons();
     });
 
-    // Suggestions element
+    // User suggestions element
+    this.userSuggestionsElement = this.element.querySelector('.search-spotlight__user-suggestions');
+
+    // URL suggestions element
     this.suggestionsElement = this.element.querySelector('.search-spotlight__suggestions');
   }
 
@@ -133,15 +152,20 @@ export class SearchSpotlight {
     // Update navigation buttons state
     this.updateNavigationButtons();
 
+    // Reset user results
+    this.userResults = [];
+    this.isSearchingUsers = false;
+
     // Set placeholder
     if (this.inputElement) {
       this.inputElement.value = '';
-      this.inputElement.placeholder = 'Search: (npub / nevent / full text)';
+      this.inputElement.placeholder = 'Search: (npub / nevent / username / full text)';
       this.inputElement.focus();
     }
 
     // Show suggestions
     this.updateSuggestions();
+    this.updateUserSuggestions();
   }
 
   public close(): void {
@@ -150,11 +174,22 @@ export class SearchSpotlight {
     this.isOpen = false;
     this.element.remove();
 
+    // Cancel any pending search
+    if (this.currentSearchController) {
+      this.currentSearchController.abort();
+      this.currentSearchController = null;
+    }
+    if (this.searchDebounceTimer) {
+      clearTimeout(this.searchDebounceTimer);
+      this.searchDebounceTimer = null;
+    }
+
     if (this.inputElement) {
       this.inputElement.value = '';
     }
 
     this.selectedSuggestionIndex = -1;
+    this.userResults = [];
   }
 
   public toggle(): void {
@@ -163,6 +198,143 @@ export class SearchSpotlight {
     } else {
       this.open();
     }
+  }
+
+  /**
+   * Debounced user search (300ms delay)
+   */
+  private debouncedUserSearch(): void {
+    // Clear previous timer
+    if (this.searchDebounceTimer) {
+      clearTimeout(this.searchDebounceTimer);
+    }
+
+    // Cancel previous search
+    if (this.currentSearchController) {
+      this.currentSearchController.abort();
+    }
+
+    const query = this.inputElement?.value.trim() || '';
+
+    // Clear results if query too short
+    if (query.length < 2) {
+      this.userResults = [];
+      this.isSearchingUsers = false;
+      this.updateUserSuggestions();
+      return;
+    }
+
+    // Skip user search for special inputs
+    if (query.startsWith('/') || query.startsWith('http') || query.startsWith('npub1') || query.startsWith('nevent1')) {
+      this.userResults = [];
+      this.isSearchingUsers = false;
+      this.updateUserSuggestions();
+      return;
+    }
+
+    // Show loading state
+    this.isSearchingUsers = true;
+    this.updateUserSuggestions();
+
+    // Debounce
+    this.searchDebounceTimer = setTimeout(() => {
+      this.performUserSearch(query);
+    }, 300);
+  }
+
+  /**
+   * Perform user search (local + remote)
+   */
+  private performUserSearch(query: string): void {
+    this.currentSearchController = this.userSearchService.search(query, {
+      onLocalResults: (results) => {
+        // Merge local results (they come first)
+        this.userResults = results;
+        this.updateUserSuggestions();
+      },
+      onRemoteResults: (results) => {
+        // Add remote results (deduplicated in service)
+        const existingPubkeys = new Set(this.userResults.map(r => r.pubkey));
+        const newResults = results.filter(r => !existingPubkeys.has(r.pubkey));
+        this.userResults = [...this.userResults, ...newResults];
+        this.updateUserSuggestions();
+      },
+      onComplete: () => {
+        this.isSearchingUsers = false;
+        this.updateUserSuggestions();
+      }
+    });
+  }
+
+  /**
+   * Update user suggestions display
+   */
+  private updateUserSuggestions(): void {
+    if (!this.userSuggestionsElement) return;
+
+    const query = this.inputElement?.value.trim() || '';
+
+    // Hide if no query or special input
+    if (query.length < 2 || query.startsWith('/') || query.startsWith('http') || query.startsWith('npub1') || query.startsWith('nevent1')) {
+      this.userSuggestionsElement.innerHTML = '';
+      return;
+    }
+
+    // Loading state
+    if (this.isSearchingUsers && this.userResults.length === 0) {
+      this.userSuggestionsElement.innerHTML = `
+        <div class="search-spotlight__user-section">
+          <div class="search-spotlight__user-header">Users</div>
+          <div class="search-spotlight__user-loading">Searching...</div>
+        </div>
+      `;
+      return;
+    }
+
+    // No results
+    if (!this.isSearchingUsers && this.userResults.length === 0) {
+      this.userSuggestionsElement.innerHTML = '';
+      return;
+    }
+
+    // Render user results
+    const usersHtml = this.userResults.slice(0, 8).map((user, index) => {
+      const displayName = user.displayName || user.name || 'Anonymous';
+      const picture = user.picture || '';
+      const followBadge = user.isFollowing ? '<span class="search-spotlight__user-badge">Following</span>' : '';
+
+      return `
+        <div class="search-spotlight__user-item" data-pubkey="${user.pubkey}" data-user-index="${index}">
+          <div class="search-spotlight__user-avatar">
+            ${picture ? `<img src="${picture}" alt="" loading="lazy" />` : '<div class="search-spotlight__user-avatar-placeholder"></div>'}
+          </div>
+          <div class="search-spotlight__user-info">
+            <span class="search-spotlight__user-name">${this.escapeHtml(displayName)}</span>
+            ${user.nip05 ? `<span class="search-spotlight__user-nip05">${this.escapeHtml(user.nip05)}</span>` : ''}
+          </div>
+          ${followBadge}
+        </div>
+      `;
+    }).join('');
+
+    this.userSuggestionsElement.innerHTML = `
+      <div class="search-spotlight__user-section">
+        <div class="search-spotlight__user-header">Users${this.isSearchingUsers ? ' (loading...)' : ''}</div>
+        ${usersHtml}
+      </div>
+    `;
+
+    // Add click handlers
+    this.userSuggestionsElement.querySelectorAll('.search-spotlight__user-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const pubkey = item.getAttribute('data-pubkey');
+        if (pubkey) {
+          const npub = hexToNpub(pubkey);
+          this.router.navigate(`/profile/${npub}`);
+          this.close();
+        }
+      });
+    });
   }
 
   private async navigateToInputURL(): Promise<void> {
@@ -180,7 +352,6 @@ export class SearchSpotlight {
 
     // Check if input is npub format
     if (input.startsWith('npub1') && input.length === 63) {
-      // Navigate to profile
       this.router.navigate(`/profile/${input}`);
       this.close();
       return;
@@ -188,7 +359,6 @@ export class SearchSpotlight {
 
     // Check if input is nevent format
     if (input.startsWith('nevent1')) {
-      // Navigate to note
       this.router.navigate(`/note/${input}`);
       this.close();
       return;
@@ -196,7 +366,6 @@ export class SearchSpotlight {
 
     // Check if input is internal route (starts with /)
     if (input.startsWith('/')) {
-      // Navigate to internal route
       this.router.navigate(input);
       this.close();
       return;
@@ -214,7 +383,6 @@ export class SearchSpotlight {
     try {
       const { open } = await import('@tauri-apps/plugin-shell');
       await open(url);
-      console.log('✓ Opened external URL:', url);
     } catch (error) {
       console.error('Failed to open external URL:', error);
     }
@@ -261,7 +429,7 @@ export class SearchSpotlight {
 
     this.suggestionsElement.innerHTML = suggestions
       .map((url, index) => `
-        <div class="search-spotlight__suggestion ${index === this.selectedSuggestionIndex ? 'search-spotlight__suggestion--selected' : ''}" data-url="${url}" data-index="${index}">
+        <div class="search-spotlight__suggestion" data-url="${url}" data-index="${index}">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="search-spotlight__suggestion-icon">
             <circle cx="12" cy="12" r="10"/>
             <polyline points="12 6 12 12 16 14"/>
@@ -309,7 +477,13 @@ export class SearchSpotlight {
     if (backBtn) elements.push(backBtn);
     if (forwardBtn) elements.push(forwardBtn);
 
-    // Add suggestions
+    // Add user suggestions
+    if (this.userSuggestionsElement) {
+      const userItems = this.userSuggestionsElement.querySelectorAll('.search-spotlight__user-item');
+      elements.push(...Array.from(userItems));
+    }
+
+    // Add URL suggestions
     if (this.suggestionsElement) {
       const suggestions = this.suggestionsElement.querySelectorAll('.search-spotlight__suggestion');
       elements.push(...Array.from(suggestions));
@@ -345,7 +519,16 @@ export class SearchSpotlight {
           return;
         }
 
-        // Check if it's a suggestion
+        // Check if it's a user item
+        const pubkey = selectedElement.getAttribute('data-pubkey');
+        if (pubkey) {
+          const npub = hexToNpub(pubkey);
+          this.router.navigate(`/profile/${npub}`);
+          this.close();
+          return;
+        }
+
+        // Check if it's a URL suggestion
         const url = selectedElement.getAttribute('data-url');
         if (url) {
           this.router.navigate(url);
@@ -359,7 +542,25 @@ export class SearchSpotlight {
     this.navigateToInputURL();
   }
 
+  /**
+   * Escape HTML to prevent XSS
+   */
+  private escapeHtml(text: string): string {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
   public destroy(): void {
+    if (this.escHandler) {
+      document.removeEventListener('keydown', this.escHandler, { capture: true });
+    }
+    if (this.searchDebounceTimer) {
+      clearTimeout(this.searchDebounceTimer);
+    }
+    if (this.currentSearchController) {
+      this.currentSearchController.abort();
+    }
     this.element.remove();
   }
 }
