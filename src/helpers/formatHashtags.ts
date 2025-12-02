@@ -13,9 +13,11 @@
 
 export function formatHashtags(html: string, hashtags: string[]): string {
   hashtags.forEach(tag => {
+    // Only match hashtags preceded by whitespace or at start of string
+    // This prevents matching #hash inside URLs like example.com/path#hash
     html = html.replace(
-      new RegExp(`#${tag}`, 'g'),
-      `<span class="hashtag" data-tag="${tag}">#${tag}</span>`
+      new RegExp(`(^|\\s)#${tag}(?=[\\s<]|$)`, 'g'),
+      `$1<span class="hashtag" data-tag="${tag}">#${tag}</span>`
     );
   });
   return html;

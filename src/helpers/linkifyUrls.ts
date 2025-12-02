@@ -11,6 +11,7 @@
  */
 
 export function linkifyUrls(html: string): string {
-  const urlRegex = /(https?:\/\/[^\s<]+)/gi;
+  // Exclude quotes and > to prevent matching URLs inside href attributes
+  const urlRegex = /(https?:\/\/[^\s<>"']+)/gi;
   return html.replace(urlRegex, '<a href="$1" target="_blank" rel="noopener">$1</a>');
 }
