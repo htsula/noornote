@@ -102,6 +102,18 @@ export class ReactionsOrchestrator extends Orchestrator {
    * Single source of truth - no duplicate fetch logic
    */
   public async getStats(noteId: string, authorPubkey?: string, eventId?: string): Promise<InteractionStats> {
+    // Validate noteId early - skip synthetic IDs
+    if (!this.isValidNoteId(noteId)) {
+      return {
+        replies: 0,
+        reposts: 0,
+        quotedReposts: 0,
+        likes: 0,
+        zaps: 0,
+        zapAmount: 0
+      };
+    }
+
     // Cache author pubkey for logging
     if (authorPubkey) {
       this.authorPubkeyCache.set(noteId, authorPubkey);
@@ -154,6 +166,19 @@ export class ReactionsOrchestrator extends Orchestrator {
    * @param eventId - Optional event ID for long-form articles (to search both #a and #e)
    */
   public async getDetailedStats(noteId: string, eventId?: string): Promise<DetailedStats> {
+    // Validate noteId - must be 64-char hex OR naddr (long-form)
+    // Skip synthetic IDs like "mutual-mutual_unfollow-..."
+    if (!this.isValidNoteId(noteId)) {
+      return {
+        replyEvents: [],
+        repostEvents: [],
+        quotedEvents: [],
+        reactionEvents: [],
+        zapEvents: [],
+        lastUpdated: Date.now()
+      };
+    }
+
     // For long-form articles: cache event ID if provided
     if (eventId && this.isLongFormArticle(noteId)) {
       this.articleEventIdCache.set(noteId, eventId);
@@ -557,6 +582,27 @@ export class ReactionsOrchestrator extends Orchestrator {
    */
   public clearAllCache(): void {
     this.detailedStatsCache.clear();
+  }
+
+  /**
+   * Validate note ID format
+   * Returns true for valid 64-char hex strings or naddr identifiers
+   * Returns false for synthetic IDs (e.g., "mutual-mutual_unfollow-...")
+   */
+  private isValidNoteId(noteId: string): boolean {
+    if (!noteId) return false;
+
+    // Valid 64-char hex string (event ID)
+    if (/^[a-f0-9]{64}$/i.test(noteId)) {
+      return true;
+    }
+
+    // Valid naddr (long-form article identifier)
+    if (noteId.startsWith('naddr1')) {
+      return true;
+    }
+
+    return false;
   }
 
   /**

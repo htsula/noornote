@@ -8,6 +8,7 @@
 
 import { MutualService } from './MutualService';
 import { MutualChangeStorage, MutualChange } from './storage/MutualChangeStorage';
+import { MutualCheckDebugLog } from './storage/MutualCheckDebugLog';
 import { EventBus } from './EventBus';
 import { SystemLogger } from '../components/system/SystemLogger';
 import { AuthService } from './AuthService';
@@ -25,6 +26,7 @@ export class MutualChangeDetector {
   private static instance: MutualChangeDetector;
   private mutualService: MutualService;
   private storage: MutualChangeStorage;
+  private debugLog: MutualCheckDebugLog;
   private eventBus: EventBus;
   private systemLogger: SystemLogger;
   private authService: AuthService;
@@ -32,6 +34,7 @@ export class MutualChangeDetector {
   private constructor() {
     this.mutualService = MutualService.getInstance();
     this.storage = MutualChangeStorage.getInstance();
+    this.debugLog = MutualCheckDebugLog.getInstance();
     this.eventBus = EventBus.getInstance();
     this.systemLogger = SystemLogger.getInstance();
     this.authService = AuthService.getInstance();
@@ -52,25 +55,54 @@ export class MutualChangeDetector {
     const startTime = Date.now();
     const currentUser = this.authService.getCurrentUser();
 
+    // Start debug logging session
+    const checkId = this.debugLog.startCheck();
+
     if (!currentUser) {
       this.systemLogger.warn('MutualChangeDetector', 'No user logged in, skipping detection');
+      await this.debugLog.logError('No user logged in');
       return { unfollows: [], newMutuals: [], totalChanges: 0, durationMs: 0, isFirstCheck: true };
     }
 
     this.systemLogger.info('MutualChangeDetector', 'Starting mutual change detection...');
 
     try {
-      // Step 1: Get current mutuals from MutualService
+      // Step 1: Get previous snapshot FIRST (for logging)
+      const previousSnapshot = this.storage.getSnapshot();
+      const previousMutualCount = previousSnapshot?.mutualPubkeys.length || 0;
+      const previousMutualPubkeys = previousSnapshot?.mutualPubkeys || [];
+
+      // Step 2: Get current mutuals from MutualService
+      const fetchStartTime = Date.now();
       const follows = await this.mutualService.getFollowsForMutualCheck();
+
+      // Debug: Log check start with full snapshot details
+      await this.debugLog.logCheckStart(
+        previousMutualCount,
+        follows.length,
+        previousMutualPubkeys,
+        previousSnapshot?.timestamp
+      );
+
       const followsWithStatus = await this.mutualService.checkMutualStatusBatch(follows);
+      const fetchDurationMs = Date.now() - fetchStartTime;
+
       const currentMutualPubkeys = followsWithStatus
         .filter(f => f.isMutual)
         .map(f => f.pubkey);
 
+      const nonMutualCount = followsWithStatus.filter(f => !f.isMutual).length;
+
       this.systemLogger.info('MutualChangeDetector', `Current mutuals: ${currentMutualPubkeys.length}`);
 
-      // Step 2: Get previous snapshot
-      const previousSnapshot = this.storage.getSnapshot();
+      // Debug: Log relay fetch results with full pubkey list
+      await this.debugLog.logRelayFetch(
+        follows.length,
+        currentMutualPubkeys.length,
+        nonMutualCount,
+        fetchDurationMs,
+        currentMutualPubkeys
+      );
 
       // First check: no previous snapshot
       if (!previousSnapshot) {
@@ -79,6 +111,11 @@ export class MutualChangeDetector {
         await this.storage.saveToFile();
 
         const durationMs = Date.now() - startTime;
+
+        // Debug: Log first check complete
+        await this.debugLog.logCheckComplete([], [], durationMs, currentMutualPubkeys.length);
+        await this.debugLog.logSnapshotUpdate(0, currentMutualPubkeys.length, currentMutualPubkeys, []);
+
         return { unfollows: [], newMutuals: [], totalChanges: 0, durationMs, isFirstCheck: true };
       }
 
@@ -103,6 +140,22 @@ export class MutualChangeDetector {
         `Detection complete: ${unfollows.length} unfollows, ${newMutuals.length} new mutuals (${durationMs}ms)`
       );
 
+      // Debug: Log full comparison result
+      await this.debugLog.logComparison(
+        previousSnapshot.mutualPubkeys,
+        currentMutualPubkeys,
+        unfollows,
+        newMutuals
+      );
+
+      // Debug: Log individual detections
+      for (const pubkey of unfollows) {
+        await this.debugLog.logUnfollowDetected(pubkey, true);
+      }
+      for (const pubkey of newMutuals) {
+        await this.debugLog.logNewMutualDetected(pubkey);
+      }
+
       // Step 4: If changes detected, process them
       if (totalChanges > 0) {
         await this.processChanges(unfollows, newMutuals, currentUser.pubkey);
@@ -110,6 +163,14 @@ export class MutualChangeDetector {
 
       // Step 5: Update snapshot
       this.storage.saveSnapshot(currentMutualPubkeys);
+
+      // Debug: Log snapshot update
+      await this.debugLog.logSnapshotUpdate(
+        previousMutualCount,
+        currentMutualPubkeys.length,
+        newMutuals,
+        unfollows
+      );
 
       // Step 6: Add history entry and save to file
       await this.storage.addHistoryEntry({
@@ -120,9 +181,15 @@ export class MutualChangeDetector {
       });
       await this.storage.saveToFile();
 
+      // Debug: Log check complete
+      await this.debugLog.logCheckComplete(unfollows, newMutuals, durationMs, currentMutualPubkeys.length);
+
       return { unfollows, newMutuals, totalChanges, durationMs, isFirstCheck: false };
     } catch (error) {
       this.systemLogger.error('MutualChangeDetector', `Detection failed: ${error}`);
+      await this.debugLog.logError(`Detection failed: ${error}`, {
+        stack: error instanceof Error ? error.stack : undefined
+      });
       return { unfollows: [], newMutuals: [], totalChanges: 0, durationMs: Date.now() - startTime, isFirstCheck: false };
     }
   }
@@ -147,7 +214,10 @@ export class MutualChangeDetector {
       });
 
       // Create synthetic notification
-      this.injectNotification(pubkey, 'mutual_unfollow', currentUserPubkey);
+      const eventId = await this.injectNotification(pubkey, 'mutual_unfollow', currentUserPubkey);
+
+      // Debug: Log notification injection
+      await this.debugLog.logNotificationInjected(pubkey, 'mutual_unfollow', eventId);
     }
 
     // Create new mutual changes
@@ -159,7 +229,10 @@ export class MutualChangeDetector {
       });
 
       // Create synthetic notification
-      this.injectNotification(pubkey, 'mutual_new', currentUserPubkey);
+      const eventId = await this.injectNotification(pubkey, 'mutual_new', currentUserPubkey);
+
+      // Debug: Log notification injection
+      await this.debugLog.logNotificationInjected(pubkey, 'mutual_new', eventId);
     }
 
     // Store changes
@@ -176,15 +249,18 @@ export class MutualChangeDetector {
 
   /**
    * Inject synthetic notification into NotificationsOrchestrator
+   * @returns The synthetic event ID for debug logging
    */
-  private injectNotification(
+  private async injectNotification(
     pubkey: string,
     type: 'mutual_unfollow' | 'mutual_new',
     currentUserPubkey: string
-  ): void {
+  ): Promise<string> {
+    const eventId = `mutual-${type}-${pubkey}-${Date.now()}`;
+
     // Create synthetic NostrEvent (not published to relays)
     const syntheticEvent: NostrEvent = {
-      id: `mutual-${type}-${pubkey}-${Date.now()}`,
+      id: eventId,
       pubkey: pubkey, // The person who unfollowed/followed
       kind: 99001, // Custom kind for mutual changes
       created_at: Math.floor(Date.now() / 1000),
@@ -201,6 +277,8 @@ export class MutualChangeDetector {
       event: syntheticEvent,
       type
     });
+
+    return eventId;
   }
 
   /**

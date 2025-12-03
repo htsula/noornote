@@ -26,6 +26,7 @@ import { RestoreListsService } from '../../../services/RestoreListsService';
 import { InfiniteScroll } from '../../ui/InfiniteScroll';
 import { ProgressBarHelper } from '../../../helpers/ProgressBarHelper';
 import { ArticleNotificationService } from '../../../services/ArticleNotificationService';
+import { renderUserMention, setupUserMentionHandlers } from '../../../helpers/UserMentionHelper';
 import type { FollowItem } from '../../../services/storage/FollowFileStorage';
 import type { UserProfile } from '../../../services/UserProfileService';
 
@@ -395,18 +396,28 @@ export class FollowListSecondaryManager extends BaseListSecondaryManager<FollowI
     const modal = container.querySelector('.mutual-changes-modal') as HTMLElement;
     if (!modal) return;
 
-    // Fetch usernames for display
-    const unfollowNames = await Promise.all(
+    const DEFAULT_AVATAR = '/assets/default-avatar.png';
+
+    // Fetch profiles for display (keep pubkey + profile together)
+    const unfollowData = await Promise.all(
       result.unfollows.map(async (pubkey) => {
         const profile = await this.userProfileService.getUserProfile(pubkey);
-        return extractDisplayName(profile);
+        return {
+          pubkey,
+          username: extractDisplayName(profile),
+          avatarUrl: profile?.picture || DEFAULT_AVATAR
+        };
       })
     );
 
-    const newMutualNames = await Promise.all(
+    const newMutualData = await Promise.all(
       result.newMutuals.map(async (pubkey) => {
         const profile = await this.userProfileService.getUserProfile(pubkey);
-        return extractDisplayName(profile);
+        return {
+          pubkey,
+          username: extractDisplayName(profile),
+          avatarUrl: profile?.picture || DEFAULT_AVATAR
+        };
       })
     );
 
@@ -418,26 +429,26 @@ export class FollowListSecondaryManager extends BaseListSecondaryManager<FollowI
           ${result.totalChanges} ${result.totalChanges === 1 ? 'change' : 'changes'} detected
         </p>
 
-        ${newMutualNames.length > 0 ? `
+        ${newMutualData.length > 0 ? `
           <div class="mutual-changes-modal__section mutual-changes-modal__section--positive">
-            <h4>New Mutuals (${newMutualNames.length})</h4>
+            <h4>New Mutuals (${newMutualData.length})</h4>
             <ul class="mutual-changes-modal__list">
-              ${newMutualNames.map(name => `
+              ${newMutualData.map(data => `
                 <li class="mutual-changes-modal__item mutual-changes-modal__item--positive">
-                  ${this.escapeHtml(name)} started following you back!
+                  ${renderUserMention(data.pubkey, { username: data.username, avatarUrl: data.avatarUrl })} started following you back!
                 </li>
               `).join('')}
             </ul>
           </div>
         ` : ''}
 
-        ${unfollowNames.length > 0 ? `
+        ${unfollowData.length > 0 ? `
           <div class="mutual-changes-modal__section mutual-changes-modal__section--negative">
-            <h4>Unfollows (${unfollowNames.length})</h4>
+            <h4>Unfollows (${unfollowData.length})</h4>
             <ul class="mutual-changes-modal__list">
-              ${unfollowNames.map(name => `
+              ${unfollowData.map(data => `
                 <li class="mutual-changes-modal__item mutual-changes-modal__item--negative">
-                  ${this.escapeHtml(name)} stopped following back
+                  ${renderUserMention(data.pubkey, { username: data.username, avatarUrl: data.avatarUrl })} stopped following back
                 </li>
               `).join('')}
             </ul>
@@ -452,6 +463,9 @@ export class FollowListSecondaryManager extends BaseListSecondaryManager<FollowI
     `;
 
     modal.style.display = 'flex';
+
+    // Setup click handlers and hover cards for user mentions
+    setupUserMentionHandlers(modal);
 
     // Event listeners
     modal.querySelector('.mutual-changes-modal__mark-seen')?.addEventListener('click', () => {
