@@ -4,6 +4,10 @@ Priorisierte Reihenfolge aller Todos.
 
 ---
 
+## PRE-RELEASE FEATURES
+
+---
+
 ## 1. Multi-User Integration ✅ ABGESCHLOSSEN
 
 **Datei:** `noorsigner-multi-account.md` (Phase 4)
@@ -61,23 +65,7 @@ Priorisierte Reihenfolge aller Todos.
 
 ---
 
-## 3. Logged-Out Features
-
-**Datei:** `logged-out-features.md`
-
-**Status:** Geplant
-
-**Scope:**
-- Onboarding UI für neue User
-- Curated Timeline (Preview ohne Login)
-- Settings-Einschränkungen für Logged-Out
-- User-Suche auf Profile-View
-
-**Aufwand:** ~8-12h
-
----
-
-## 4. NIP-51 Kategorisierte Bookmarks (Optional)
+## 3. NIP-51 Kategorisierte Bookmarks (Optional)
 
 **Datei:** `nip51-categorized-bookmarks.md`
 
@@ -93,7 +81,7 @@ Priorisierte Reihenfolge aller Todos.
 
 ---
 
-## 5. Automatic List Sync (Optional)
+## 4. Automatic List Sync (Optional)
 
 **Datei:** `automatic-list-sync.md`
 
@@ -110,7 +98,7 @@ Priorisierte Reihenfolge aller Todos.
 
 ---
 
-## 6. NIP-17 Private DMs
+## 5. NIP-17 Private DMs
 
 **Datei:** `nip17-private-dms.md`
 
@@ -128,7 +116,7 @@ Priorisierte Reihenfolge aller Todos.
 
 ---
 
-## 7. NoorSigner Cross-Platform (LETZTES)
+## 6. NoorSigner Cross-Platform (LETZTES PRE-RELEASE)
 
 **Dateien:** `tauri-only-strategy.md`, `x-platform/*.md`
 
@@ -145,11 +133,11 @@ Priorisierte Reihenfolge aller Todos.
 
 **Aufwand:** ~12-18h (viel Testing)
 
-**Note:** Aufwendig wegen Cross-Platform-Testing. Daher ganz am Ende.
+**Note:** Aufwendig wegen Cross-Platform-Testing. Daher ganz am Ende vor Release.
 
 ---
 
-## Kleinere Tasks (aus todos.md)
+## Kleinere Tasks (Pre-Release)
 
 ### Legal/Support Static Page
 - Impressum, Datenschutz (DSGVO)
@@ -163,16 +151,12 @@ Priorisierte Reihenfolge aller Todos.
 - **Ziel:** Optimistische UI nach erfolgreichem Payment
 - **Aufwand:** ~2-4h Investigation + Fix
 
-### Plugin System (Zukunft)
-- On-boarding, Bookmarks, Freelancer MP, Seller MP, Discovery
-- Sehr vage, niedrige Priorität
-- **Aufwand:** TBD
-
 ---
 
 ## Unter Beobachtung
 
 - **KeySigner IPC Connection Lost**: Fix implementiert (Retry-Logik, Grace Period, Adaptive Polling). Monitoring in Production.
+- **Mutual Check Feature**: Snapshot-Persistenz Bug gefixt (2025-12-03). Langzeit-Test.
 
 ---
 
@@ -185,21 +169,86 @@ Priorisierte Reihenfolge aller Todos.
 
 ---
 
-## Zusammenfassung
+---
+
+## POST-RELEASE: PLUGIN SYSTEM
+
+Nach dem ersten Release wird ein Plugin-System eingeführt. Optionale Funktionalität wird als Plugins umgesetzt, die Nutzer aktivieren/deaktivieren können.
+
+---
+
+## Plugin System Architecture
+
+**Status:** Post-Release geplant
+
+**Konzept:**
+- Plugins als optionale Erweiterungen
+- Aktivierung/Deaktivierung über Settings
+- Isolierte Codebasis pro Plugin
+- Gemeinsame Plugin-API für:
+  - Views registrieren
+  - Sidebar-Einträge hinzufügen
+  - Settings-Sektionen erweitern
+  - EventBus-Integration
+
+**Aufwand:** ~20-30h (Architektur + erste Plugins)
+
+---
+
+## Onboarding Plugin (ehem. "Logged-Out Features")
+
+**Datei:** `logged-out-features.md`
+
+**Status:** Post-Release, als Plugin
+
+**Scope:**
+- Onboarding UI für neue User
+- Curated "Starter Feed" Timeline (Preview ohne Login)
+- Geführte Einrichtung (Follows, Relays, Profil)
+- Settings-Einschränkungen für Logged-Out
+
+**Warum Plugin:**
+- Optionales Feature (nicht jeder braucht Onboarding)
+- Komplexe UI-Flows die nicht im Core sein müssen
+- Gutes erstes Plugin um das System zu validieren
+
+**Aufwand:** ~8-12h (nach Plugin-System)
+
+---
+
+## Weitere Plugin-Ideen (Zukunft)
+
+- **Discovery Plugin**: Erweiterte User/Content-Suche
+- **Analytics Plugin**: Detaillierte Statistiken
+- **Bookmarks Pro Plugin**: Erweiterte Kategorisierung
+- **Freelancer Marketplace**: (sehr vage)
+- **Seller Marketplace**: (sehr vage)
+
+---
+
+---
+
+## Zusammenfassung Pre-Release
 
 | # | Feature | Aufwand | Status |
 |---|---------|---------|--------|
 | 1 | Multi-User Integration | - | ✅ Abgeschlossen |
-| 2 | Mutual Check (Phase 2-4) | - | 🔍 Unter Beobachtung (Langzeit-Test) |
-| 3 | Logged-Out Features | 8-12h | ⬜ Offen |
-| 4 | Legal Page | 2h | ⬜ Offen |
-| 5 | Zap Display Fix | 2-4h | ⬜ Offen |
-| 6 | NIP-51 Bookmarks | 6-10h | ⬜ Optional |
-| 7 | Auto List Sync | 8-12h | ⬜ Optional |
-| 8 | NIP-17 Private DMs | 15-20h | ⬜ Offen |
-| 9 | Cross-Platform | 12-18h | ⬜ Letztes |
+| 2 | Mutual Check (Phase 2-4) | - | 🔍 Unter Beobachtung |
+| 3 | NIP-51 Bookmarks | 6-10h | ⬜ Optional |
+| 4 | Auto List Sync | 8-12h | ⬜ Optional |
+| 5 | NIP-17 Private DMs | 15-20h | ⬜ Offen |
+| 6 | Cross-Platform | 12-18h | ⬜ Letztes |
+| - | Legal Page | 2h | ⬜ Offen |
+| - | Zap Display Fix | 2-4h | ⬜ Offen |
 
-**Gesamt verbleibend:** ~62-89h (ohne optionale Features: ~47-64h)
+**Pre-Release verbleibend:** ~37-64h (ohne optionale Features: ~31-44h)
+
+## Zusammenfassung Post-Release
+
+| Feature | Aufwand | Status |
+|---------|---------|--------|
+| Plugin System Architecture | 20-30h | ⬜ Nach Release |
+| Onboarding Plugin | 8-12h | ⬜ Nach Release |
 
 ---
 
@@ -209,3 +258,4 @@ Priorisierte Reihenfolge aller Todos.
 - `mutual-check-*.md` - Mutual Check Feature Details (6 Dateien)
 - `noorsigner-multi-account.md` - Multi-Account API Details
 - `tauri-only-strategy.md` - Cross-Platform Details
+- `logged-out-features.md` - Onboarding Plugin Details
