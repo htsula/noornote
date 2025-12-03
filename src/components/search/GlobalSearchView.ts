@@ -305,7 +305,7 @@ export class GlobalSearchView {
    * Ensure search tab button exists in tabs container
    */
   private ensureSearchTabButton(): void {
-    const tabsContainer = document.querySelector('.tabs');
+    const tabsContainer = document.querySelector('#sidebar-tabs');
     if (!tabsContainer) return;
 
     // Check if tab already exists

@@ -19,6 +19,7 @@ import type { Event as NostrEvent, Filter as NostrFilter } from '@nostr-dev-kit/
 import { Orchestrator } from './Orchestrator';
 import { NostrTransport } from '../transport/NostrTransport';
 import { MuteOrchestrator } from './MuteOrchestrator';
+import { MutualChangeStorage } from '../storage/MutualChangeStorage';
 import { SystemLogger } from '../../components/system/SystemLogger';
 import { AuthService } from '../AuthService';
 import { EventBus } from '../EventBus';
@@ -124,6 +125,12 @@ export class NotificationsOrchestrator extends Orchestrator {
 
     // Step 2: Fetch initial notifications (last 100)
     await this.fetchInitialNotifications(currentUser.pubkey);
+
+    // Step 2.5: Restore mutual change notifications from storage
+    // First ensure storage is initialized from file
+    const mutualStorage = MutualChangeStorage.getInstance();
+    await mutualStorage.initFromFile();
+    this.restoreMutualChangeNotifications(currentUser.pubkey);
 
     // Step 3: Subscribe to new notifications (real-time)
     const now = Math.floor(Date.now() / 1000);
@@ -883,6 +890,66 @@ export class NotificationsOrchestrator extends Orchestrator {
     // Emit badge update
     this.eventBus.emit('notifications:badge-update');
     this.eventBus.emit('notifications:new', { notification });
+  }
+
+  /**
+   * Restore mutual change notifications from storage
+   * Called at startup to persist notifications across app restarts
+   */
+  private restoreMutualChangeNotifications(currentUserPubkey: string): void {
+    const storage = MutualChangeStorage.getInstance();
+    const changes = storage.getChanges();
+
+    if (changes.length === 0) {
+      this.systemLogger.info('NotificationsOrchestrator', 'No stored mutual changes to restore');
+      return;
+    }
+
+    this.systemLogger.info('NotificationsOrchestrator', `Restoring ${changes.length} mutual change notifications`);
+
+    for (const change of changes) {
+      const type: NotificationType = change.type === 'unfollow' ? 'mutual_unfollow' : 'mutual_new';
+      const eventId = `mutual-${type}-${change.pubkey}-${change.detectedAt}`;
+
+      // Skip if from muted user
+      if (this.mutedPubkeys.has(change.pubkey)) {
+        continue;
+      }
+
+      // Check for duplicates
+      const isDuplicate = this.notifications.some(n => n.event.id === eventId);
+      if (isDuplicate) {
+        continue;
+      }
+
+      // Create synthetic event
+      const syntheticEvent: NostrEvent = {
+        id: eventId,
+        pubkey: change.pubkey,
+        kind: 99001,
+        created_at: Math.floor(change.detectedAt / 1000),
+        tags: [
+          ['type', type],
+          ['p', currentUserPubkey]
+        ],
+        content: '',
+        sig: ''
+      };
+
+      const notification: NotificationEvent = {
+        event: syntheticEvent,
+        type,
+        timestamp: syntheticEvent.created_at
+      };
+
+      // Add to notifications list
+      this.notifications.push(notification);
+    }
+
+    // Sort notifications by timestamp (newest first)
+    this.notifications.sort((a, b) => b.timestamp - a.timestamp);
+
+    this.systemLogger.info('NotificationsOrchestrator', `Restored ${changes.length} mutual change notifications`);
   }
 
   public override destroy(): void {

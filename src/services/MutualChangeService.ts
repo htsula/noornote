@@ -15,6 +15,7 @@
 import { EventBus } from './EventBus';
 import { MutualChangeStorage } from './storage/MutualChangeStorage';
 import { MutualChangeScheduler } from './MutualChangeScheduler';
+import { MutualChangeDetector } from './MutualChangeDetector';
 import { SystemLogger } from '../components/system/SystemLogger';
 
 const DELAYED_START_MS = 3 * 60 * 1000; // 3 minutes
@@ -23,6 +24,7 @@ class MutualChangeServiceImpl {
   private eventBus: EventBus;
   private storage: MutualChangeStorage;
   private scheduler: MutualChangeScheduler;
+  private detector: MutualChangeDetector;
   private systemLogger: SystemLogger;
   private delayedStartTimeout: ReturnType<typeof setTimeout> | null = null;
   private isInitialized: boolean = false;
@@ -31,6 +33,7 @@ class MutualChangeServiceImpl {
     this.eventBus = EventBus.getInstance();
     this.storage = MutualChangeStorage.getInstance();
     this.scheduler = MutualChangeScheduler.getInstance();
+    this.detector = MutualChangeDetector.getInstance();
     this.systemLogger = SystemLogger.getInstance();
 
     this.setupEventListeners();
@@ -49,17 +52,27 @@ class MutualChangeServiceImpl {
     });
   }
 
-  private handleLogin(): void {
+  private async handleLogin(): Promise<void> {
     // Cancel any pending delayed start
     if (this.delayedStartTimeout) {
       clearTimeout(this.delayedStartTimeout);
     }
 
-    this.systemLogger.info('MutualChangeService', `User logged in, scheduling start in ${DELAYED_START_MS / 1000 / 60} minutes...`);
+    this.systemLogger.info('MutualChangeService', 'User logged in, initializing storage immediately...');
 
-    // Delayed start to avoid impacting startup performance
+    // Initialize storage from file IMMEDIATELY (so manual checks work)
+    try {
+      await this.storage.initFromFile();
+      this.systemLogger.info('MutualChangeService', 'Storage initialized from file');
+    } catch (error) {
+      this.systemLogger.error('MutualChangeService', `Failed to init storage: ${error}`);
+    }
+
+    this.systemLogger.info('MutualChangeService', `Scheduling scheduler start in ${DELAYED_START_MS / 1000 / 60} minutes...`);
+
+    // Delayed scheduler start to avoid impacting startup performance
     this.delayedStartTimeout = setTimeout(async () => {
-      await this.start();
+      await this.startScheduler();
     }, DELAYED_START_MS);
   }
 
@@ -80,23 +93,24 @@ class MutualChangeServiceImpl {
     this.systemLogger.info('MutualChangeService', 'Stopped on logout');
   }
 
-  private async start(): Promise<void> {
+  private async startScheduler(): Promise<void> {
     if (this.isInitialized) {
-      this.systemLogger.info('MutualChangeService', 'Already initialized, skipping');
+      this.systemLogger.info('MutualChangeService', 'Scheduler already started, skipping');
       return;
     }
 
     try {
-      // Initialize storage from file
-      await this.storage.initFromFile();
+      // Restore notifications from stored changes (survives app restart)
+      // Note: Storage is already initialized from handleLogin()
+      await this.detector.restoreNotificationsFromChanges();
 
       // Start scheduler
       await this.scheduler.start();
 
       this.isInitialized = true;
-      this.systemLogger.info('MutualChangeService', 'Started successfully');
+      this.systemLogger.info('MutualChangeService', 'Scheduler started successfully');
     } catch (error) {
-      this.systemLogger.error('MutualChangeService', `Failed to start: ${error}`);
+      this.systemLogger.error('MutualChangeService', `Failed to start scheduler: ${error}`);
     }
   }
 }

@@ -547,7 +547,7 @@ export class MainLayout {
         <div class="secondary-user">
           <!-- User status will be mounted here -->
         </div>
-        <div class="tabs">
+        <div id="sidebar-tabs" class="tabs">
           <button class="tab tab--active" data-tab="system-log">System Logs</button>
           <!-- List tabs (Bookmarks/Follows/Mutes) will be inserted dynamically here -->
         </div>
@@ -996,7 +996,7 @@ export class MainLayout {
     });
 
     // Insert tab and content into DOM
-    const tabsContainer = this.element.querySelector('.tabs');
+    const tabsContainer = this.element.querySelector('#sidebar-tabs');
     const contentBody = this.element.querySelector('.secondary-content-body');
 
     if (tabsContainer && contentBody) {
