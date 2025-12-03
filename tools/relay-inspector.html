@@ -76,7 +76,8 @@
     <strong>Presets:</strong><br>
     <button onclick="loadPreset('follows')">Follows (kind:3)</button>
     <button onclick="loadPreset('mutes')">Mutes (kind:10000)</button>
-    <button onclick="loadPreset('bookmarks')">Bookmarks (kind:10003)</button>
+    <button onclick="loadPreset('bookmarks')">Bookmarks OLD (kind:10003)</button>
+    <button onclick="loadPreset('bookmarksets')">Bookmark Sets (kind:30003)</button>
     <button onclick="loadPreset('profile')">Profile (kind:0)</button>
     <button onclick="loadPreset('relaylist')">Relay List (kind:10002)</button>
   </div>
@@ -199,6 +200,7 @@ wss://purplepag.es</textarea>
         follows: { kinds: '3', limit: 1 },
         mutes: { kinds: '10000', limit: 1 },
         bookmarks: { kinds: '10003', limit: 1 },
+        bookmarksets: { kinds: '30003', limit: 20 },
         profile: { kinds: '0', limit: 1 },
         relaylist: { kinds: '10002', limit: 1 }
       };
@@ -411,8 +413,8 @@ wss://purplepag.es</textarea>
       const result = document.getElementById('result').textContent;
       try {
         const data = JSON.parse(result);
-        if (data.events && data.events[0]) {
-          navigator.clipboard.writeText(JSON.stringify(data.events[0], null, 2));
+        if (data.events) {
+          navigator.clipboard.writeText(JSON.stringify(data.events, null, 2));
         }
       } catch (e) {}
     }

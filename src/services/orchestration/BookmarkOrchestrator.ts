@@ -1,9 +1,12 @@
 /**
  * @orchestrator BookmarkOrchestrator
- * @purpose Manages bookmarks (kind:10003) with NIP-51 private bookmark support
+ * @purpose Manages bookmarks (kind:30003 Bookmark Sets) with NIP-51 category support
  * @used-by NoteMenu, BookmarksTab
  *
- * REFACTORED: Now uses GenericListOrchestrator with config-driven approach
+ * NIP-51 Bookmark Sets Architecture:
+ * - Each category (folder) = one kind:30003 event with d-tag = category name
+ * - Root bookmarks (no folder) = kind:30003 with d-tag = ""
+ * - Private bookmarks = encrypted in content of respective category event
  */
 
 import type { Event as NostrEvent } from '@nostr-dev-kit/ndk';
@@ -11,7 +14,7 @@ import type { BookmarkItem } from '../storage/BookmarkFileStorage';
 import type { FetchFromRelaysResult } from '../sync/ListStorageAdapter';
 import { GenericListOrchestrator } from './GenericListOrchestrator';
 import { bookmarkListConfig, createBookmarkFileStorageWrapper } from './configs/BookmarkListConfig';
-import { EventBus } from '../EventBus';
+import { BookmarkFolderService } from '../BookmarkFolderService';
 
 // Re-export BookmarkItem for external use
 export type { BookmarkItem };
@@ -24,15 +27,17 @@ export interface BookmarkStatus {
 export interface BookmarkWithMetadata {
   id: string;
   isPrivate: boolean;
+  category?: string;  // d-tag value (folder name)
 }
 
 export class BookmarkOrchestrator extends GenericListOrchestrator<BookmarkItem> {
   private static instance: BookmarkOrchestrator;
   private featureFlagKey = 'noornote_nip51_private_bookmarks_enabled';
-  private migrationFlagKey = 'noornote_bookmarks_file_storage_migrated';
+  private folderService: BookmarkFolderService;
 
   private constructor() {
     super('BookmarkOrchestrator', bookmarkListConfig, createBookmarkFileStorageWrapper());
+    this.folderService = BookmarkFolderService.getInstance();
   }
 
   public static getInstance(): BookmarkOrchestrator {
@@ -73,45 +78,11 @@ export class BookmarkOrchestrator extends GenericListOrchestrator<BookmarkItem> 
   }
 
   /**
-   * Check if migration to file storage is complete
-   */
-  private isMigrated(): boolean {
-    try {
-      const stored = localStorage.getItem(this.migrationFlagKey);
-      return stored === 'true';
-    } catch {
-      return false;
-    }
-  }
-
-  /**
-   * Mark migration as complete
-   */
-  private setMigrated(): void {
-    try {
-      localStorage.setItem(this.migrationFlagKey, 'true');
-    } catch (error) {
-      this.systemLogger.error('BookmarkOrchestrator', `Failed to save migration flag: ${error}`);
-    }
-  }
-
-  /**
    * Check if a note is bookmarked (public, private, or both)
    * Reads from browserItems (localStorage)
    */
-  public async isBookmarked(noteId: string, pubkey: string): Promise<BookmarkStatus> {
+  public async isBookmarked(noteId: string, _pubkey: string): Promise<BookmarkStatus> {
     try {
-      // Check if we've migrated to file storage
-      const migrated = this.isMigrated();
-
-      if (!migrated) {
-        // MIGRATION: Fetch from relays one last time
-        this.systemLogger.info('BookmarkOrchestrator', 'First run detected - migrating bookmarks from relay to file storage...');
-        await this.migrateFromRelaysToFiles(pubkey);
-        this.setMigrated();
-      }
-
-      // Read from browserItems (localStorage)
       const browserItems = this.getBrowserItems();
       const item = browserItems.find(b => b.id === noteId);
 
@@ -119,7 +90,6 @@ export class BookmarkOrchestrator extends GenericListOrchestrator<BookmarkItem> 
         return { public: false, private: false };
       }
 
-      // Check isPrivate flag
       if (item.isPrivate) {
         return { public: false, private: true };
       } else {
@@ -142,21 +112,12 @@ export class BookmarkOrchestrator extends GenericListOrchestrator<BookmarkItem> 
     }
 
     try {
-      // Ensure migration is complete
-      if (!this.isMigrated()) {
-        await this.migrateFromRelaysToFiles(currentUser.pubkey);
-        this.setMigrated();
-      }
-
-      // Read current browserItems
       const browserItems = this.getBrowserItems();
 
-      // Check if already bookmarked
       if (browserItems.some(b => b.id === noteId)) {
         return true; // Already bookmarked
       }
 
-      // Create bookmark item with isPrivate flag
       const item: BookmarkItem = {
         id: noteId,
         type: 'e',
@@ -165,16 +126,16 @@ export class BookmarkOrchestrator extends GenericListOrchestrator<BookmarkItem> 
         isPrivate: isPrivate
       };
 
-      // Add via parent class
       await this.addItem(item);
+
+      // Ensure folder assignment exists (root by default)
+      this.folderService.ensureBookmarkAssignment(noteId);
 
       this.systemLogger.info('BookmarkOrchestrator',
         `Added ${isPrivate ? 'private' : 'public'} bookmark (local): ${noteId}`
       );
 
-      // Emit event
       this.eventBus.emit('bookmark:updated', {});
-
       return true;
     } catch (error) {
       this.systemLogger.error('BookmarkOrchestrator', `Failed to add bookmark: ${error}`);
@@ -186,23 +147,21 @@ export class BookmarkOrchestrator extends GenericListOrchestrator<BookmarkItem> 
    * Remove a bookmark (public or private)
    * Writes to browserItems (localStorage)
    */
-  public async removeBookmark(noteId: string, isPrivate: boolean): Promise<boolean> {
+  public async removeBookmark(noteId: string, _isPrivate: boolean): Promise<boolean> {
     const currentUser = this.authService.getCurrentUser();
     if (!currentUser) {
       throw new Error('User not authenticated');
     }
 
     try {
-      // Remove via parent class
       await this.removeItem(noteId);
 
-      this.systemLogger.info('BookmarkOrchestrator',
-        `Removed bookmark (local): ${noteId}`
-      );
+      // Remove folder assignment
+      this.folderService.removeBookmarkAssignment(noteId);
 
-      // Emit event
+      this.systemLogger.info('BookmarkOrchestrator', `Removed bookmark (local): ${noteId}`);
+
       this.eventBus.emit('bookmark:updated', {});
-
       return true;
     } catch (error) {
       this.systemLogger.error('BookmarkOrchestrator', `Failed to remove bookmark: ${error}`);
@@ -212,7 +171,6 @@ export class BookmarkOrchestrator extends GenericListOrchestrator<BookmarkItem> 
 
   /**
    * Get all bookmarks with their status (public/private/both)
-   * Wrapper for GenericListOrchestrator.getAllItemsWithStatus()
    */
   public async getAllBookmarksWithStatus(): Promise<Map<string, { public: boolean; private: boolean }>> {
     try {
@@ -240,17 +198,6 @@ export class BookmarkOrchestrator extends GenericListOrchestrator<BookmarkItem> 
    */
   public async getAllBookmarks(pubkey: string): Promise<string[]> {
     try {
-      // Check if we've migrated to file storage
-      const migrated = this.isMigrated();
-
-      if (!migrated) {
-        // MIGRATION: Fetch from relays one last time
-        this.systemLogger.info('BookmarkOrchestrator', 'First run detected - migrating bookmarks from relay to file storage...');
-        await this.migrateFromRelaysToFiles(pubkey);
-        this.setMigrated();
-      }
-
-      // Read from browserItems
       const browserItems = this.getBrowserItems();
 
       // If empty, try to load from files
@@ -277,21 +224,9 @@ export class BookmarkOrchestrator extends GenericListOrchestrator<BookmarkItem> 
 
   /**
    * Get all bookmarks with metadata (public/private indicator)
-   * Reads from browserItems (localStorage)
    */
   public async getAllBookmarksWithMetadata(pubkey: string): Promise<BookmarkWithMetadata[]> {
     try {
-      // Check if we've migrated to file storage
-      const migrated = this.isMigrated();
-
-      if (!migrated) {
-        // MIGRATION: Fetch from relays one last time
-        this.systemLogger.info('BookmarkOrchestrator', 'First run detected - migrating bookmarks from relay to file storage...');
-        await this.migrateFromRelaysToFiles(pubkey);
-        this.setMigrated();
-      }
-
-      // Read from browserItems
       const browserItems = this.getBrowserItems();
 
       // If empty, try to load from files
@@ -322,189 +257,234 @@ export class BookmarkOrchestrator extends GenericListOrchestrator<BookmarkItem> 
     }
   }
 
+  // ===== NIP-51 Bookmark Sets: Multi-Category Publish/Fetch =====
+
+  /**
+   * Publish to relays (manual sync via UI button)
+   * Creates one kind:30003 event per category (folder)
+   *
+   * NIP-51 Bookmark Sets:
+   * - Root bookmarks → d: ""
+   * - Category "Work" → d: "Work"
+   * - Private bookmarks → encrypted in content
+   */
+  public async publishToRelays(): Promise<void> {
+    const currentUser = this.authService.getCurrentUser();
+    if (!currentUser) {
+      throw new Error('User not authenticated');
+    }
+
+    const writeRelays = this.transport.getWriteRelays();
+    if (writeRelays.length === 0) {
+      throw new Error('No write relays available');
+    }
+
+    // Read folder structure from file (authoritative source after "Save to file")
+    const { BookmarkFileStorage } = await import('../storage/BookmarkFileStorage');
+    const fileStorage = BookmarkFileStorage.getInstance();
+    const publicData = await fileStorage.readPublic();
+    const privateData = await fileStorage.readPrivate();
+
+    // Merge all items
+    const allItems = [...publicData.items, ...privateData.items];
+
+    // Get folders and assignments from file
+    const folders = publicData.folders || [];
+    const folderAssignments = publicData.folderAssignments || [];
+
+    this.systemLogger.info('BookmarkOrchestrator',
+      `Publishing: ${allItems.length} items, ${folders.length} folders, ${folderAssignments.length} assignments`
+    );
+
+    // Group bookmarks by folder
+    const bookmarksByFolder = new Map<string, BookmarkItem[]>();
+
+    // Initialize with root and all folders
+    bookmarksByFolder.set('', []); // Root
+    folders.forEach(folder => bookmarksByFolder.set(folder.name, []));
+
+    // Assign bookmarks to their folders using file-based assignments
+    allItems.forEach(item => {
+      const assignment = folderAssignments.find(a => a.bookmarkId === item.id);
+      const folderId = assignment?.folderId || '';
+      const folder = folders.find(f => f.id === folderId);
+      const categoryName = folder?.name || ''; // Root if no folder
+
+      const categoryItems = bookmarksByFolder.get(categoryName) || [];
+      categoryItems.push(item);
+      bookmarksByFolder.set(categoryName, categoryItems);
+    });
+
+    // Publish one event per category
+    let totalPublished = 0;
+
+    for (const [categoryName, items] of bookmarksByFolder) {
+      // Skip empty categories (except root if it has items or we want to clear it)
+      if (items.length === 0 && categoryName !== '') {
+        continue;
+      }
+
+      const publicItems = items.filter(item => !item.isPrivate);
+      const privateItems = items.filter(item => item.isPrivate);
+
+      // Build tags
+      const tags: string[][] = [['d', categoryName]];
+
+      // Add public bookmark tags
+      publicItems.forEach(item => {
+        const itemTags = this.config.itemToTags(item);
+        tags.push(...itemTags);
+      });
+
+      // Encrypt private items
+      let encryptedContent = '';
+      if (privateItems.length > 0) {
+        encryptedContent = await this.encryptPrivateItems(privateItems, currentUser.pubkey);
+      }
+
+      const event = {
+        kind: 30003,
+        created_at: Math.floor(Date.now() / 1000),
+        tags,
+        content: encryptedContent,
+        pubkey: currentUser.pubkey
+      };
+
+      const signed = await this.authService.signEvent(event);
+      if (!signed) {
+        this.systemLogger.error('BookmarkOrchestrator', `Failed to sign event for category: ${categoryName}`);
+        continue;
+      }
+
+      await this.transport.publish(writeRelays, signed);
+      totalPublished++;
+
+      this.systemLogger.info('BookmarkOrchestrator',
+        `Published category "${categoryName || 'root'}": ${publicItems.length} public + ${privateItems.length} private`
+      );
+    }
+
+    this.systemLogger.info('BookmarkOrchestrator',
+      `Published ${totalPublished} bookmark set events to relays`
+    );
+  }
+
   /**
    * Fetch bookmarks from relays (read-only, no local changes)
-   * Wrapper for GenericListOrchestrator.fetchFromRelays()
+   * Fetches ALL kind:30003 events for the user and extracts categories
    */
-  public async fetchBookmarksFromRelays(pubkey: string): Promise<FetchFromRelaysResult<BookmarkItem>> {
-    return await this.fetchFromRelays(pubkey);
+  public async fetchFromRelays(pubkey: string): Promise<FetchFromRelaysResult<BookmarkItem>> {
+    const relays = this.getBootstrapRelays();
+
+    try {
+      // Fetch ALL kind:30003 events (all categories)
+      const events = await this.transport.fetch(relays, [{
+        authors: [pubkey],
+        kinds: [30003],
+        limit: 100  // Support up to 100 categories
+      }], 10000);
+
+      if (events.length === 0) {
+        this.systemLogger.info('BookmarkOrchestrator', 'No bookmark sets found on relays');
+        return { items: [], relayContentWasEmpty: true };
+      }
+
+      // Deduplicate by d-tag (keep newest per category)
+      const eventsByDTag = new Map<string, NostrEvent>();
+      events.forEach(event => {
+        const dTag = event.tags.find(t => t[0] === 'd')?.[1] || '';
+        const existing = eventsByDTag.get(dTag);
+        if (!existing || event.created_at > existing.created_at) {
+          eventsByDTag.set(dTag, event);
+        }
+      });
+
+      const allItems: BookmarkItem[] = [];
+      let anyContentWasEmpty = true;
+
+      for (const [categoryName, event] of eventsByDTag) {
+        const hasContent = event.content && event.content.trim() !== '';
+        if (hasContent) anyContentWasEmpty = false;
+
+        // Extract public items from tags
+        const publicItems = this.config.tagsToItem(
+          event.tags.filter(t => t[0] !== 'd'), // Exclude d-tag
+          event.created_at
+        );
+        publicItems.forEach(item => { item.isPrivate = false; });
+
+        // Extract private items from encrypted content
+        let privateItems: BookmarkItem[] = [];
+        if (hasContent) {
+          try {
+            privateItems = await this.decryptPrivateItems(event, pubkey);
+            privateItems.forEach(item => { item.isPrivate = true; });
+          } catch (error) {
+            this.systemLogger.error('BookmarkOrchestrator',
+              `Failed to decrypt private items for category "${categoryName}": ${error}`
+            );
+          }
+        }
+
+        allItems.push(...publicItems, ...privateItems);
+
+        this.systemLogger.info('BookmarkOrchestrator',
+          `Fetched category "${categoryName || 'root'}": ${publicItems.length} public + ${privateItems.length} private`
+        );
+      }
+
+      // Deduplicate by ID
+      const itemMap = new Map<string, BookmarkItem>();
+      allItems.forEach(item => itemMap.set(this.config.getItemId(item), item));
+
+      return {
+        items: Array.from(itemMap.values()),
+        relayContentWasEmpty: anyContentWasEmpty
+      };
+    } catch (error) {
+      this.systemLogger.error('BookmarkOrchestrator', `Failed to fetch from relays: ${error}`);
+      return { items: [], relayContentWasEmpty: true };
+    }
   }
 
   /**
    * Sync from relays (manual sync)
-   * Wrapper for GenericListOrchestrator.syncFromRelays()
+   * Fetches all categories and merges with local
    */
   public async syncFromRelays(pubkey: string): Promise<{ added: number; total: number }> {
-    return await super.syncFromRelays(pubkey);
-  }
-
-  /**
-   * Migrate from relay-based to file-based storage
-   * Fetches from relays, extracts all types (e/a/t/r), writes to files
-   */
-  private async migrateFromRelaysToFiles(pubkey: string): Promise<void> {
     const relays = this.getBootstrapRelays();
-    this.systemLogger.info('BookmarkOrchestrator', `Migrating from relays (${relays.length} relays)...`);
+    this.systemLogger.info('BookmarkOrchestrator', `Syncing from relays (${relays.length} relays)...`);
 
     try {
-      // Fetch both public and private bookmark events
-      const [publicEvent, privateEvent] = await Promise.all([
-        this.fetchPublicBookmarks(pubkey, relays),
-        this.isPrivateBookmarksEnabled()
-          ? this.fetchPrivateBookmarks(pubkey, relays)
-          : Promise.resolve(null)
-      ]);
+      const fetchResult = await this.fetchFromRelays(pubkey);
+      const localItems = this.getBrowserItems();
 
-      // Extract bookmarks with all types
-      const publicItems = this.extractBookmarkItems(publicEvent, false);
-      const privateItems = privateEvent
-        ? await this.extractPrivateBookmarkItems(privateEvent, pubkey)
-        : [];
+      // Merge (union)
+      const merged = this.mergeItems(localItems, fetchResult.items);
+      const added = merged.length - localItems.length;
 
-      // Write to files
-      await this.fileStorage.writePublic({
-        items: publicItems,
-        lastModified: Math.floor(Date.now() / 1000)
+      this.setBrowserItems(merged);
+
+      // Ensure folder assignments for all items
+      merged.forEach(item => {
+        this.folderService.ensureBookmarkAssignment(item.id);
       });
-
-      await this.fileStorage.writePrivate({
-        items: privateItems,
-        lastModified: Math.floor(Date.now() / 1000)
-      });
-
-      // Also set browserItems
-      this.setBrowserItems([...publicItems, ...privateItems]);
 
       this.systemLogger.info('BookmarkOrchestrator',
-        `Migration complete: ${publicItems.length} public, ${privateItems.length} private bookmarks written to files`
+        `Sync complete: ${added} new items added (${merged.length} total)`
       );
+
+      return { added, total: merged.length };
     } catch (error) {
-      this.systemLogger.error('BookmarkOrchestrator', `Migration failed: ${error}`);
+      this.systemLogger.error('BookmarkOrchestrator', `Sync from relays failed: ${error}`);
       throw error;
     }
   }
 
   /**
-   * Fetch public bookmarks (kind:10003 WITHOUT #d tag)
+   * Fetch bookmarks from relays (read-only wrapper)
    */
-  private async fetchPublicBookmarks(pubkey: string, relays: string[]): Promise<NostrEvent | null> {
-    const events = await this.transport.fetch(relays, [{
-      authors: [pubkey],
-      kinds: [10003],
-      limit: 10
-    }], 5000);
-
-    // Filter out events with #d tag (those are private bookmarks)
-    const publicEvents = events.filter(event => {
-      const hasDTag = event.tags.some(tag => tag[0] === 'd');
-      return !hasDTag;
-    });
-
-    if (publicEvents.length > 0) {
-      const mostRecent = publicEvents.sort((a, b) => b.created_at - a.created_at)[0];
-      return mostRecent;
-    }
-
-    return null;
-  }
-
-  /**
-   * Fetch private bookmarks (kind:30003 with #d tag)
-   */
-  private async fetchPrivateBookmarks(pubkey: string, relays: string[]): Promise<NostrEvent | null> {
-    const events = await this.transport.fetch(relays, [{
-      authors: [pubkey],
-      kinds: [30003],
-      '#d': ['private-bookmarks'],
-      limit: 1
-    }], 5000);
-
-    if (events.length > 0) {
-      return events[0];
-    }
-
-    return null;
-  }
-
-  /**
-   * Extract bookmark items from public event tags
-   * Supports all NIP-51 types: e (notes), a (articles), t (hashtags), r (URLs)
-   */
-  private extractBookmarkItems(event: NostrEvent | null, isPrivate: boolean): BookmarkItem[] {
-    if (!event) return [];
-
-    const items: BookmarkItem[] = [];
-
-    // Extract 'e' tags (notes)
-    event.tags
-      .filter(tag => tag[0] === 'e' && tag[1])
-      .forEach(tag => {
-        items.push({
-          id: tag[1],
-          type: 'e',
-          value: tag[1],
-          addedAt: event.created_at,
-          isPrivate
-        });
-      });
-
-    // Extract 'a' tags (articles)
-    event.tags
-      .filter(tag => tag[0] === 'a' && tag[1])
-      .forEach(tag => {
-        items.push({
-          id: tag[1],
-          type: 'a',
-          value: tag[1],
-          addedAt: event.created_at,
-          isPrivate
-        });
-      });
-
-    // Extract 't' tags (hashtags)
-    event.tags
-      .filter(tag => tag[0] === 't' && tag[1])
-      .forEach(tag => {
-        items.push({
-          id: tag[1],
-          type: 't',
-          value: tag[1],
-          addedAt: event.created_at,
-          isPrivate
-        });
-      });
-
-    // Extract 'r' tags (URLs)
-    event.tags
-      .filter(tag => tag[0] === 'r' && tag[1])
-      .forEach(tag => {
-        items.push({
-          id: tag[1],
-          type: 'r',
-          value: tag[1],
-          addedAt: event.created_at,
-          isPrivate
-        });
-      });
-
-    return items;
-  }
-
-  /**
-   * Extract private bookmark items (decrypt from content)
-   */
-  private async extractPrivateBookmarkItems(event: NostrEvent, pubkey: string): Promise<BookmarkItem[]> {
-    if (!event.content || event.content.trim() === '') {
-      return [];
-    }
-
-    try {
-      // Use parent class decryption
-      const decryptedItems = await this.decryptPrivateItems(event, pubkey);
-      return decryptedItems;
-    } catch (error) {
-      this.systemLogger.error('BookmarkOrchestrator', `Failed to decrypt private bookmarks: ${error}`);
-      return [];
-    }
+  public async fetchBookmarksFromRelays(pubkey: string): Promise<FetchFromRelaysResult<BookmarkItem>> {
+    return await this.fetchFromRelays(pubkey);
   }
 }

@@ -65,19 +65,19 @@ Priorisierte Reihenfolge aller Todos.
 
 ---
 
-## 3. NIP-51 Kategorisierte Bookmarks (Optional)
+## 3. NIP-51 Bookmark Sets (Kategorien) ✅ ABGESCHLOSSEN
 
-**Datei:** `nip51-categorized-bookmarks.md`
+**Datei:** `../features/nip51-categorized-bookmarks.md`
 
-**Status:** Geplant, niedrige Priorität
+**Erledigt:**
+- ✅ kind:30003 (Bookmark Sets) implementiert
+- ✅ Root-Bookmarks: `d: ""`
+- ✅ Kategorien: `d: "Kategorie-Name"`
+- ✅ Private Bookmarks: NIP-44 encrypted content
+- ✅ Multi-Event Publish (ein Event pro Kategorie)
+- ✅ Fetch + Deduplizierung
 
-**Scope:**
-- Folder-Sync zu Relays (kind:30001)
-- Hybrid: kind:10003 (root) + kind:30001 (folders)
-
-**Aufwand:** ~6-10h
-
-**Note:** Folders funktionieren lokal. Relay-Sync ist "nice to have".
+**Note:** Folgt aktuellem NIP-51 Standard.
 
 ---
 
@@ -234,14 +234,14 @@ Nach dem ersten Release wird ein Plugin-System eingeführt. Optionale Funktional
 |---|---------|---------|--------|
 | 1 | Multi-User Integration | - | ✅ Abgeschlossen |
 | 2 | Mutual Check (Phase 2-4) | - | 🔍 Unter Beobachtung |
-| 3 | NIP-51 Bookmarks | 6-10h | ⬜ Optional |
+| 3 | NIP-51 Bookmark Sets | - | ✅ Abgeschlossen |
 | 4 | Auto List Sync | 8-12h | ⬜ Optional |
 | 5 | NIP-17 Private DMs | 15-20h | ⬜ Offen |
 | 6 | Cross-Platform | 12-18h | ⬜ Letztes |
 | - | Legal Page | 2h | ⬜ Offen |
 | - | Zap Display Fix | 2-4h | ⬜ Offen |
 
-**Pre-Release verbleibend:** ~37-64h (ohne optionale Features: ~31-44h)
+**Pre-Release verbleibend:** ~31-54h (ohne optionale Features: ~23-38h)
 
 ## Zusammenfassung Post-Release
 
