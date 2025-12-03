@@ -41,6 +41,7 @@ export interface MutualCheckData extends BaseFileData {
 
 // localStorage keys (runtime cache)
 const LS_SNAPSHOT = 'noornote_mutual_snapshot';
+const LS_PENDING_SNAPSHOT = 'noornote_mutual_pending_snapshot';
 const LS_LAST_CHECK = 'noornote_mutual_last_check';
 const LS_UNSEEN_CHANGES = 'noornote_mutual_unseen_changes';
 const LS_CHANGES = 'noornote_mutual_changes';
@@ -108,12 +109,27 @@ export class MutualChangeStorage extends BaseFileStorage<MutualCheckData> {
 
   /**
    * Save current state to both localStorage AND file
+   * Preserves checkHistory from file (not stored in localStorage)
    */
   public async saveToFile(): Promise<void> {
     try {
-      const data = this.collectFromLocalStorage();
-      await this.write(data);
-      this.systemLogger.info(this.getLoggerName(), 'Saved to file');
+      // Read existing file to preserve history
+      const existingData = await this.read();
+      const lsData = this.collectFromLocalStorage();
+
+      const existingCount = existingData.snapshot?.mutualPubkeys.length || 0;
+      const newCount = lsData.snapshot?.mutualPubkeys.length || 0;
+
+      // Merge: use localStorage for snapshot/changes, preserve file history
+      const mergedData: MutualCheckData = {
+        ...lsData,
+        checkHistory: existingData.checkHistory || []
+      };
+
+      await this.write(mergedData);
+      this.systemLogger.info(this.getLoggerName(),
+        `Saved to file: ${existingCount} → ${newCount} mutuals (history: ${mergedData.checkHistory.length} entries)`
+      );
     } catch (error) {
       this.systemLogger.error(this.getLoggerName(), `Failed to save to file: ${error}`);
     }
@@ -150,7 +166,7 @@ export class MutualChangeStorage extends BaseFileStorage<MutualCheckData> {
   }
 
   /**
-   * Save new snapshot to localStorage
+   * Save new snapshot to localStorage (acknowledged state)
    */
   public saveSnapshot(mutualPubkeys: string[]): void {
     const snapshot: MutualSnapshot = {
@@ -159,6 +175,21 @@ export class MutualChangeStorage extends BaseFileStorage<MutualCheckData> {
     };
     localStorage.setItem(LS_SNAPSHOT, JSON.stringify(snapshot));
     localStorage.setItem(LS_LAST_CHECK, Date.now().toString());
+  }
+
+  /**
+   * Save pending snapshot (current state, not yet acknowledged)
+   */
+  public savePendingSnapshot(mutualPubkeys: string[]): void {
+    localStorage.setItem(LS_PENDING_SNAPSHOT, JSON.stringify(mutualPubkeys));
+  }
+
+  /**
+   * Get pending snapshot pubkeys
+   */
+  public getPendingSnapshot(): string[] | null {
+    const stored = localStorage.getItem(LS_PENDING_SNAPSHOT);
+    return stored ? JSON.parse(stored) : null;
   }
 
   /**
@@ -244,6 +275,7 @@ export class MutualChangeStorage extends BaseFileStorage<MutualCheckData> {
    */
   public clearLocalStorage(): void {
     localStorage.removeItem(LS_SNAPSHOT);
+    localStorage.removeItem(LS_PENDING_SNAPSHOT);
     localStorage.removeItem(LS_LAST_CHECK);
     localStorage.removeItem(LS_UNSEEN_CHANGES);
     localStorage.removeItem(LS_CHANGES);

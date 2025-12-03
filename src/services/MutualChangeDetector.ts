@@ -2,6 +2,12 @@
  * MutualChangeDetector
  * Compares mutual snapshots and detects changes (Phase 2-4)
  *
+ * ARCHITECTURE:
+ * - Snapshot = "acknowledged" state (only updated on "Mark as seen")
+ * - Pending snapshot = current state from last detect()
+ * - Changes persist until user clicks "Mark as seen"
+ * - Notifications are restored from changes on app start
+ *
  * @purpose Detect unfollows and new mutuals by comparing snapshots
  * @used-by MutualChangeScheduler, FollowListSecondaryManager
  */
@@ -48,7 +54,40 @@ export class MutualChangeDetector {
   }
 
   /**
+   * Restore notifications from stored changes (called on app start)
+   * This ensures notifications persist across app restarts
+   */
+  public async restoreNotificationsFromChanges(): Promise<void> {
+    const currentUser = this.authService.getCurrentUser();
+    if (!currentUser) return;
+
+    const changes = this.storage.getChanges();
+    if (changes.length === 0) {
+      this.systemLogger.info('MutualChangeDetector', 'No stored changes to restore');
+      return;
+    }
+
+    this.systemLogger.info('MutualChangeDetector', `Restoring ${changes.length} notifications from stored changes`);
+
+    // Inject notifications for all stored changes
+    for (const change of changes) {
+      const type = change.type === 'unfollow' ? 'mutual_unfollow' : 'mutual_new';
+      await this.injectNotification(change.pubkey, type, currentUser.pubkey, change.detectedAt);
+    }
+
+    // Update green dot
+    if (changes.length > 0) {
+      this.storage.setUnseenChanges(true);
+      this.eventBus.emit('mutual-changes:detected', {
+        unfollowCount: changes.filter(c => c.type === 'unfollow').length,
+        newMutualCount: changes.filter(c => c.type === 'new_mutual').length
+      });
+    }
+  }
+
+  /**
    * Perform detection: compare current mutuals with snapshot
+   * NOTE: Snapshot is NOT updated here - only on markAsSeen()
    * @returns Detection result with unfollows, new mutuals, and timing
    */
   public async detect(): Promise<DetectionResult> {
@@ -104,10 +143,11 @@ export class MutualChangeDetector {
         currentMutualPubkeys
       );
 
-      // First check: no previous snapshot
+      // First check: no previous snapshot - save initial and return
       if (!previousSnapshot) {
         this.systemLogger.info('MutualChangeDetector', 'First check - saving initial snapshot');
         this.storage.saveSnapshot(currentMutualPubkeys);
+        this.storage.savePendingSnapshot(currentMutualPubkeys);
         await this.storage.saveToFile();
 
         const durationMs = Date.now() - startTime;
@@ -119,7 +159,7 @@ export class MutualChangeDetector {
         return { unfollows: [], newMutuals: [], totalChanges: 0, durationMs, isFirstCheck: true };
       }
 
-      // Step 3: Compare snapshots
+      // Step 3: Compare with ACKNOWLEDGED snapshot (not pending)
       const previousMutuals = new Set(previousSnapshot.mutualPubkeys);
       const currentMutuals = new Set(currentMutualPubkeys);
 
@@ -156,33 +196,31 @@ export class MutualChangeDetector {
         await this.debugLog.logNewMutualDetected(pubkey);
       }
 
-      // Step 4: If changes detected, process them
+      // Step 4: If changes detected, process them (store + notify)
       if (totalChanges > 0) {
         await this.processChanges(unfollows, newMutuals, currentUser.pubkey);
       }
 
-      // Step 5: Update snapshot
-      this.storage.saveSnapshot(currentMutualPubkeys);
+      // Step 5: Save PENDING snapshot (NOT the acknowledged one!)
+      // The acknowledged snapshot is only updated on markAsSeen()
+      this.storage.savePendingSnapshot(currentMutualPubkeys);
 
-      // Debug: Log snapshot update
-      await this.debugLog.logSnapshotUpdate(
-        previousMutualCount,
-        currentMutualPubkeys.length,
-        newMutuals,
-        unfollows
-      );
-
-      // Step 6: Add history entry and save to file
+      // Step 6: Add history entry to file
+      // NOTE: We do NOT call saveToFile() here - the acknowledged snapshot
+      // in the file should only be updated when user clicks "Mark as Seen"
       await this.storage.addHistoryEntry({
         timestamp: Date.now(),
         unfollowCount: unfollows.length,
         newMutualCount: newMutuals.length,
         durationMs
       });
-      await this.storage.saveToFile();
 
-      // Debug: Log check complete
+      // Debug: Log check complete (no snapshot update!)
       await this.debugLog.logCheckComplete(unfollows, newMutuals, durationMs, currentMutualPubkeys.length);
+      await this.debugLog.log('PENDING_SNAPSHOT_SAVED', {
+        pendingMutualCount: currentMutualPubkeys.length,
+        note: 'Acknowledged snapshot NOT updated - waiting for markAsSeen()'
+      });
 
       return { unfollows, newMutuals, totalChanges, durationMs, isFirstCheck: false };
     } catch (error) {
@@ -214,7 +252,7 @@ export class MutualChangeDetector {
       });
 
       // Create synthetic notification
-      const eventId = await this.injectNotification(pubkey, 'mutual_unfollow', currentUserPubkey);
+      const eventId = await this.injectNotification(pubkey, 'mutual_unfollow', currentUserPubkey, now);
 
       // Debug: Log notification injection
       await this.debugLog.logNotificationInjected(pubkey, 'mutual_unfollow', eventId);
@@ -229,13 +267,13 @@ export class MutualChangeDetector {
       });
 
       // Create synthetic notification
-      const eventId = await this.injectNotification(pubkey, 'mutual_new', currentUserPubkey);
+      const eventId = await this.injectNotification(pubkey, 'mutual_new', currentUserPubkey, now);
 
       // Debug: Log notification injection
       await this.debugLog.logNotificationInjected(pubkey, 'mutual_new', eventId);
     }
 
-    // Store changes
+    // Store changes (appends to existing)
     this.storage.addChanges(changes);
 
     // Emit event for UI updates (green dot)
@@ -254,16 +292,18 @@ export class MutualChangeDetector {
   private async injectNotification(
     pubkey: string,
     type: 'mutual_unfollow' | 'mutual_new',
-    currentUserPubkey: string
+    currentUserPubkey: string,
+    timestamp?: number
   ): Promise<string> {
-    const eventId = `mutual-${type}-${pubkey}-${Date.now()}`;
+    const ts = timestamp || Date.now();
+    const eventId = `mutual-${type}-${pubkey}-${ts}`;
 
     // Create synthetic NostrEvent (not published to relays)
     const syntheticEvent: NostrEvent = {
       id: eventId,
       pubkey: pubkey, // The person who unfollowed/followed
       kind: 99001, // Custom kind for mutual changes
-      created_at: Math.floor(Date.now() / 1000),
+      created_at: Math.floor(ts / 1000),
       tags: [
         ['type', type],
         ['p', currentUserPubkey]
@@ -289,11 +329,43 @@ export class MutualChangeDetector {
   }
 
   /**
-   * Clear changes (after user has seen them)
+   * Mark all changes as seen:
+   * - Updates snapshot to pending (acknowledges current state)
+   * - Clears all stored changes
+   * - Saves to file (this is the ONLY place where file snapshot is updated!)
    */
-  public markAsSeen(): void {
+  public async markAsSeen(): Promise<void> {
+    // Get pending snapshot and make it the acknowledged snapshot
+    const pendingSnapshot = this.storage.getPendingSnapshot();
+    const previousSnapshot = this.storage.getSnapshot();
+
+    await this.debugLog.log('MARK_AS_SEEN_START', {
+      pendingCount: pendingSnapshot?.length || 0,
+      previousCount: previousSnapshot?.mutualPubkeys.length || 0,
+      hasPending: !!pendingSnapshot
+    });
+
+    if (pendingSnapshot) {
+      this.storage.saveSnapshot(pendingSnapshot);
+      await this.debugLog.log('SNAPSHOT_ACKNOWLEDGED', {
+        mutualCount: pendingSnapshot.length,
+        note: 'User clicked Mark as Seen - pending snapshot is now acknowledged in localStorage'
+      });
+    }
+
+    // Clear changes
     this.storage.clearChanges();
+
+    // Save to file - this is the ONLY place where file snapshot gets updated!
+    await this.storage.saveToFile();
+
+    await this.debugLog.log('MARK_AS_SEEN_COMPLETE', {
+      newSnapshotCount: pendingSnapshot?.length || previousSnapshot?.mutualPubkeys.length || 0,
+      note: 'File updated with new acknowledged snapshot'
+    });
+
     this.eventBus.emit('mutual-changes:seen');
+    this.systemLogger.info('MutualChangeDetector', 'Changes marked as seen, snapshot updated');
   }
 
   /**

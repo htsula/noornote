@@ -486,5 +486,88 @@ __MUTUAL_CHANGE_SCHEDULER__.stop()
 
 ---
 
-**Last Updated:** 2025-12-02
-**Status:** ✅ Implemented
+**Last Updated:** 2025-12-03
+**Status:** ✅ Implemented + Bugfixes
+
+---
+
+## 🐛 Bugfix Session 2025-12-03
+
+### Problem: Snapshot Alternation Bug
+User reported that mutual changes were alternating on each check:
+- Check 1: "Mike followed back" (302→303)
+- Check 2: "Mike unfollowed" (303→302)
+- Check 3: "Mike followed back" (302→303)
+- etc.
+
+Debug logs showed `SNAPSHOT_ACKNOWLEDGED` with alternating counts (302/303), but the file always showed 302 mutuals.
+
+### Root Cause Analysis
+Two critical bugs in the storage flow:
+
+1. **`detect()` called `saveToFile()` after `addHistoryEntry()`**
+   - `addHistoryEntry()` reads file, adds history, writes file (preserves old snapshot)
+   - `saveToFile()` reads `LS_SNAPSHOT` (still OLD value), writes file
+   - Result: Old snapshot overwrites any changes
+
+2. **`saveToFile()` destroyed history**
+   - `collectFromLocalStorage()` returned `checkHistory: []`
+   - Every `saveToFile()` call wiped the history from file
+
+### Fixes Applied
+
+**1. MutualChangeStorage.saveToFile()** - Now preserves history:
+```typescript
+public async saveToFile(): Promise<void> {
+  // Read existing file to preserve history
+  const existingData = await this.read();
+  const lsData = this.collectFromLocalStorage();
+
+  // Merge: use localStorage for snapshot/changes, preserve file history
+  const mergedData: MutualCheckData = {
+    ...lsData,
+    checkHistory: existingData.checkHistory || []
+  };
+
+  await this.write(mergedData);
+}
+```
+
+**2. MutualChangeDetector.detect()** - Removed redundant `saveToFile()`:
+```typescript
+// Step 6: Add history entry to file
+// NOTE: We do NOT call saveToFile() here - the acknowledged snapshot
+// in the file should only be updated when user clicks "Mark as Seen"
+await this.storage.addHistoryEntry({...});
+// ❌ REMOVED: await this.storage.saveToFile();
+```
+
+**3. Enhanced debug logging in `markAsSeen()`**:
+- `MARK_AS_SEEN_START`: logs pending/previous counts
+- `MARK_AS_SEEN_COMPLETE`: confirms file update
+
+### Correct Flow After Fix
+
+```
+detect() runs:
+├─ Fetches current mutuals from relays
+├─ Compares with LS_SNAPSHOT (acknowledged)
+├─ Stores changes in LS_CHANGES
+├─ Saves pending to LS_PENDING_SNAPSHOT
+├─ addHistoryEntry() writes history to file (keeps old snapshot!)
+└─ ❌ NO saveToFile() - file snapshot unchanged
+
+markAsSeen() runs:
+├─ Copies LS_PENDING_SNAPSHOT → LS_SNAPSHOT
+├─ Clears LS_CHANGES
+├─ saveToFile() writes NEW snapshot to file
+└─ ✅ File now has acknowledged snapshot
+```
+
+### Additional Improvements
+- "Check for Changes" link in Follows tab for manual checks
+- Toast feedback: "No changes detected" when check runs without findings
+- Clickable usernames in mutual changes modal (navigates to profile)
+
+### Status
+Feature in **long-term observation** - awaiting user confirmation that the bug is fixed.

@@ -468,8 +468,8 @@ export class FollowListSecondaryManager extends BaseListSecondaryManager<FollowI
     setupUserMentionHandlers(modal);
 
     // Event listeners
-    modal.querySelector('.mutual-changes-modal__mark-seen')?.addEventListener('click', () => {
-      this.mutualChangeDetector.markAsSeen();
+    modal.querySelector('.mutual-changes-modal__mark-seen')?.addEventListener('click', async () => {
+      await this.mutualChangeDetector.markAsSeen();
       modal.style.display = 'none';
       ToastService.show('Changes marked as seen', 'success');
     });
