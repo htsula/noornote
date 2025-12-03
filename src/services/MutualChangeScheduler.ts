@@ -13,6 +13,7 @@
 
 import { MutualChangeDetector } from './MutualChangeDetector';
 import { MutualChangeStorage } from './storage/MutualChangeStorage';
+import { MutualCheckDebugLog } from './storage/MutualCheckDebugLog';
 import { SystemLogger } from '../components/system/SystemLogger';
 import { AuthService } from './AuthService';
 
@@ -22,6 +23,7 @@ export class MutualChangeScheduler {
   private static instance: MutualChangeScheduler;
   private detector: MutualChangeDetector;
   private storage: MutualChangeStorage;
+  private debugLog: MutualCheckDebugLog;
   private systemLogger: SystemLogger;
   private authService: AuthService;
 
@@ -32,6 +34,7 @@ export class MutualChangeScheduler {
   private constructor() {
     this.detector = MutualChangeDetector.getInstance();
     this.storage = MutualChangeStorage.getInstance();
+    this.debugLog = MutualCheckDebugLog.getInstance();
     this.systemLogger = SystemLogger.getInstance();
     this.authService = AuthService.getInstance();
   }
@@ -51,6 +54,10 @@ export class MutualChangeScheduler {
     const currentUser = this.authService.getCurrentUser();
     if (!currentUser) {
       this.systemLogger.warn('MutualChangeScheduler', 'Cannot start - no user logged in');
+      await this.debugLog.logSchedulerEvent('SCHEDULER_START', {
+        success: false,
+        reason: 'No user logged in'
+      });
       return;
     }
 
@@ -61,6 +68,18 @@ export class MutualChangeScheduler {
 
     this.isRunning = true;
     this.systemLogger.info('MutualChangeScheduler', '🚀 Starting scheduler...');
+
+    // Debug: Log scheduler start
+    const lastCheck = this.storage.getLastCheckTimestamp();
+    await this.debugLog.logSchedulerEvent('SCHEDULER_START', {
+      success: true,
+      userPubkey: currentUser.pubkey,
+      checkIntervalMs: CHECK_INTERVAL_MS,
+      checkIntervalHours: CHECK_INTERVAL_MS / 1000 / 60 / 60,
+      lastCheckTimestamp: lastCheck ? new Date(lastCheck).toISOString() : null,
+      timeSinceLastCheckMs: lastCheck ? Date.now() - lastCheck : null,
+      timeSinceLastCheckHours: lastCheck ? ((Date.now() - lastCheck) / 1000 / 60 / 60).toFixed(2) : null
+    });
 
     // Check immediately if due
     await this.checkIfDue();
@@ -76,7 +95,7 @@ export class MutualChangeScheduler {
   /**
    * Stop the scheduler (called on logout)
    */
-  public stop(): void {
+  public async stop(): Promise<void> {
     if (this.checkInterval) {
       clearInterval(this.checkInterval);
       this.checkInterval = null;
@@ -84,6 +103,11 @@ export class MutualChangeScheduler {
     this.isRunning = false;
     this.lastCheckAttempt = null;
     this.systemLogger.info('MutualChangeScheduler', '🛑 Scheduler stopped');
+
+    // Debug: Log scheduler stop
+    await this.debugLog.logSchedulerEvent('SCHEDULER_STOP', {
+      reason: 'Manual stop or logout'
+    });
   }
 
   /**
@@ -97,6 +121,14 @@ export class MutualChangeScheduler {
     if (!lastCheck || (now - lastCheck) > CHECK_INTERVAL_MS) {
       this.systemLogger.info('MutualChangeScheduler', 'Check is due, running detection...');
       this.lastCheckAttempt = now;
+
+      // Debug: Log check due
+      await this.debugLog.logSchedulerEvent('CHECK_DUE', {
+        lastCheckTimestamp: lastCheck ? new Date(lastCheck).toISOString() : null,
+        timeSinceLastCheckMs: lastCheck ? now - lastCheck : null,
+        timeSinceLastCheckHours: lastCheck ? ((now - lastCheck) / 1000 / 60 / 60).toFixed(2) : null,
+        isFirstCheck: !lastCheck
+      });
 
       try {
         const result = await this.detector.detect();
@@ -112,10 +144,23 @@ export class MutualChangeScheduler {
         }
       } catch (error) {
         this.systemLogger.error('MutualChangeScheduler', `Detection failed: ${error}`);
+        await this.debugLog.logError(`Scheduler detection failed: ${error}`, {
+          stack: error instanceof Error ? error.stack : undefined
+        });
       }
     } else {
       const nextCheckIn = Math.round((CHECK_INTERVAL_MS - (now - lastCheck)) / 1000 / 60);
       this.systemLogger.info('MutualChangeScheduler', `Check not due yet (next in ~${nextCheckIn} min)`);
+
+      // Debug: Log check not due (only occasionally to avoid spam)
+      // We'll log this to help debug timing issues
+      await this.debugLog.logSchedulerEvent('CHECK_NOT_DUE', {
+        lastCheckTimestamp: new Date(lastCheck).toISOString(),
+        timeSinceLastCheckMs: now - lastCheck,
+        timeSinceLastCheckHours: ((now - lastCheck) / 1000 / 60 / 60).toFixed(2),
+        nextCheckInMinutes: nextCheckIn,
+        nextCheckTimestamp: new Date(lastCheck + CHECK_INTERVAL_MS).toISOString()
+      });
     }
   }
 
@@ -126,6 +171,12 @@ export class MutualChangeScheduler {
     this.systemLogger.info('MutualChangeScheduler', '⚡ Force check triggered');
     this.lastCheckAttempt = Date.now();
 
+    // Debug: Log force check
+    await this.debugLog.logSchedulerEvent('CHECK_DUE', {
+      trigger: 'FORCE_CHECK',
+      manuallyTriggered: true
+    });
+
     try {
       const result = await this.detector.detect();
       this.systemLogger.info('MutualChangeScheduler',
@@ -134,6 +185,9 @@ export class MutualChangeScheduler {
       return;
     } catch (error) {
       this.systemLogger.error('MutualChangeScheduler', `Force check failed: ${error}`);
+      await this.debugLog.logError(`Force check failed: ${error}`, {
+        stack: error instanceof Error ? error.stack : undefined
+      });
     }
   }
 
