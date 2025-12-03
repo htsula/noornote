@@ -46,8 +46,8 @@ export const bookmarkListConfig: ListConfig<BookmarkItem> = {
   name: 'bookmarks',
   browserStorageKey: 'noornote_bookmarks_browser',
 
-  // Nostr Event (NIP-51: ONE event with public tags + encrypted private content)
-  publicEventKind: 10003,       // kind:10003 (bookmarks)
+  // Nostr Event (NIP-51: Bookmark Sets - one event per category)
+  publicEventKind: 30003,       // kind:30003 (bookmark sets)
 
   // Encryption
   encryptPrivateContent: true,  // Private bookmarks are encrypted in content
