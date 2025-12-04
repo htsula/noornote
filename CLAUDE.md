@@ -124,6 +124,7 @@ Research: Jumble (master branch!), YakiHonne, Nostur - navigate from front page
 
 **Local Directories:**
 - NDK: `../NDK/` (local NDK development)
+- Yakihonne: https://github.com/YakiHonne/yakihonne-web-app
 - Jumble: `../jumble/` (local github clone, uses nostr-tools version2)
 - Habla: `../habla/` (habla.news - NIP-23 long-form reference, Next.js + NDK)
 
