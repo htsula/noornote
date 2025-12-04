@@ -25,6 +25,7 @@ import { BookmarkStorageAdapter } from '../../../services/sync/adapters/Bookmark
 import { RestoreListsService } from '../../../services/RestoreListsService';
 import { SyncConfirmationModal } from '../../modals/SyncConfirmationModal';
 import { NewFolderModal } from '../../modals/NewFolderModal';
+import { NewBookmarkModal } from '../../modals/NewBookmarkModal';
 import { BookmarkCard, type BookmarkCardData } from '../../bookmarks/BookmarkCard';
 import { FolderCard, type FolderData } from '../../bookmarks/FolderCard';
 import { UpNavigator } from '../../bookmarks/UpNavigator';
@@ -287,7 +288,7 @@ export class BookmarkSecondaryManager {
   }
 
   /**
-   * Render header with New Folder button
+   * Render header with New dropdown button
    */
   private renderHeader(folder: { id: string; name: string } | null): string {
     const title = folder ? folder.name : 'Bookmarks';
@@ -295,12 +296,32 @@ export class BookmarkSecondaryManager {
     return `
       <div class="bookmark-header">
         <span class="bookmark-header__title">${this.escapeHtml(title)}</span>
-        <button class="bookmark-header__new-folder-btn" title="Create new folder">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-          </svg>
-          New Folder
-        </button>
+        <div class="bookmark-header__new-dropdown">
+          <button class="bookmark-header__new-btn" title="Create new item">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            New
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" class="bookmark-header__new-chevron">
+              <path d="M6 9L12 15L18 9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+          <div class="bookmark-header__dropdown-menu">
+            <button class="bookmark-header__dropdown-item" data-action="new-folder">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <path d="M3 7C3 5.89543 3.89543 5 5 5H9.58579C9.851 5 10.1054 5.10536 10.2929 5.29289L12 7H19C20.1046 7 21 7.89543 21 9V17C21 18.1046 20.1046 19 19 19H5C3.89543 19 3 18.1046 3 17V7Z" stroke="currentColor" stroke-width="1.5"/>
+              </svg>
+              Folder
+            </button>
+            <button class="bookmark-header__dropdown-item" data-action="new-bookmark">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <path d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                <path d="M10.172 13.828a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+              Bookmark
+            </button>
+          </div>
+        </div>
       </div>
     `;
   }
@@ -759,6 +780,75 @@ export class BookmarkSecondaryManager {
     modal.show();
   }
 
+  private createNewBookmark(): void {
+    const modal = new NewBookmarkModal({
+      onConfirm: async (url, folderId, newFolderName) => {
+        try {
+          let targetFolderId = folderId;
+          let categoryName = '';
+
+          // Create new folder if requested
+          if (folderId === '__new__' && newFolderName) {
+            const folder = this.folderService.createFolder(newFolderName);
+            this.folderService.addToRootOrder('folder', folder.id);
+            targetFolderId = folder.id;
+            categoryName = newFolderName;
+          } else if (folderId && folderId !== '') {
+            // Get category name from existing folder
+            const folder = this.folderService.getFolder(folderId);
+            categoryName = folder?.name || '';
+          }
+
+          // Create bookmark item
+          const bookmarkItem: BookmarkItem = {
+            id: url, // For URL bookmarks, ID is the URL
+            type: 'r',
+            value: url,
+            addedAt: Math.floor(Date.now() / 1000),
+            isPrivate: false,
+            category: categoryName
+          };
+
+          // Add to browser storage
+          const currentItems = this.adapter.getBrowserItems();
+          if (currentItems.some(b => b.id === url)) {
+            ToastService.show('This URL is already bookmarked', 'info');
+            return;
+          }
+          this.adapter.setBrowserItems([...currentItems, bookmarkItem]);
+
+          // Add to cache
+          this.bookmarksCache.set(url, {
+            ...bookmarkItem,
+            event: undefined,
+            isPrivate: false
+          });
+
+          // Assign to folder
+          if (targetFolderId && targetFolderId !== '') {
+            this.folderService.moveBookmarkToFolder(url, targetFolderId);
+          } else {
+            this.folderService.ensureBookmarkAssignment(url);
+            this.folderService.addToRootOrder('bookmark', url);
+          }
+
+          ToastService.show('Bookmark created', 'success');
+
+          // Refresh view
+          const container = this.containerElement.querySelector('[data-tab-content="list-bookmarks"]');
+          if (container) {
+            this.renderCurrentView(container as HTMLElement);
+          }
+        } catch (error) {
+          console.error('Failed to create bookmark:', error);
+          ToastService.show('Failed to create bookmark', 'error');
+        }
+      }
+    });
+
+    modal.show();
+  }
+
   // ========================================
   // Sync Handlers
   // ========================================
@@ -782,8 +872,37 @@ export class BookmarkSecondaryManager {
   }
 
   private bindHeaderButtons(container: HTMLElement): void {
-    const newFolderBtn = container.querySelector('.bookmark-header__new-folder-btn');
-    newFolderBtn?.addEventListener('click', () => this.createNewFolder());
+    // New dropdown toggle
+    const newBtn = container.querySelector('.bookmark-header__new-btn');
+    const dropdown = container.querySelector('.bookmark-header__new-dropdown');
+    const dropdownMenu = container.querySelector('.bookmark-header__dropdown-menu');
+
+    newBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dropdown?.classList.toggle('bookmark-header__new-dropdown--open');
+    });
+
+    // Close dropdown when clicking outside
+    const closeDropdown = (e: Event) => {
+      if (!dropdown?.contains(e.target as Node)) {
+        dropdown?.classList.remove('bookmark-header__new-dropdown--open');
+      }
+    };
+    document.addEventListener('click', closeDropdown);
+
+    // Dropdown actions
+    const folderItem = container.querySelector('[data-action="new-folder"]');
+    const bookmarkItem = container.querySelector('[data-action="new-bookmark"]');
+
+    folderItem?.addEventListener('click', () => {
+      dropdown?.classList.remove('bookmark-header__new-dropdown--open');
+      this.createNewFolder();
+    });
+
+    bookmarkItem?.addEventListener('click', () => {
+      dropdown?.classList.remove('bookmark-header__new-dropdown--open');
+      this.createNewBookmark();
+    });
 
     // Breadcrumb navigation
     const rootLink = container.querySelector('[data-navigate="root"]');

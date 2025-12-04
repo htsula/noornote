@@ -37,7 +37,20 @@
     color: $color-5;
   }
 
-  &__new-folder-btn {
+  &__new-dropdown {
+    position: relative;
+
+    &--open {
+      .bookmark-header__dropdown-menu {
+        display: block;
+      }
+      .bookmark-header__new-chevron {
+        transform: rotate(180deg);
+      }
+    }
+  }
+
+  &__new-btn {
     display: flex;
     align-items: center;
     gap: calc($gap / 4);
@@ -58,6 +71,48 @@
     &:hover {
       background: rgba($color-4, 0.1);
       border-color: $color-4;
+    }
+  }
+
+  &__new-chevron {
+    transition: transform 0.2s ease;
+  }
+
+  &__dropdown-menu {
+    display: none;
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 4px;
+    background: $color-1;
+    border: 1px solid $color-2;
+    border-radius: $radius-md;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    min-width: 140px;
+    z-index: 100;
+    overflow: hidden;
+  }
+
+  &__dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: calc($gap / 2);
+    width: 100%;
+    padding: calc($gap / 2) calc($gap * 0.75);
+    background: none;
+    border: none;
+    color: $color-5;
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+
+    svg {
+      color: $color-4;
+    }
+
+    &:hover {
+      background: rgba($color-4, 0.15);
     }
   }
 }
@@ -442,5 +497,39 @@
     justify-content: flex-end;
     gap: calc($gap / 2);
     margin-top: calc($gap / 2);
+  }
+}
+
+// New bookmark modal
+.new-bookmark-modal {
+  &__content {
+    display: flex;
+    flex-direction: column;
+    gap: $gap;
+  }
+
+  &__new-folder-group {
+    // Initially hidden, shown when "Create new folder" is selected
+  }
+
+  &__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: calc($gap / 2);
+    margin-top: calc($gap / 2);
+  }
+
+  // Style the select to match inputs
+  select.input {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 36px;
+    cursor: pointer;
+
+    &:focus {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23e570a0' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    }
   }
 }
