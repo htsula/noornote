@@ -13,6 +13,8 @@ import type { NostrEvent } from '@nostr-dev-kit/ndk';
 
 export interface BookmarkCardData {
   id: string;              // Bookmark ID (always available from localStorage)
+  type?: string;           // 'e' (event), 'r' (URL), 't' (hashtag), 'a' (replaceable event)
+  value?: string;          // The bookmark value (same as ID for e, URL for r, etc.)
   event?: NostrEvent;      // Event data (may be undefined if not loaded)
   isPrivate: boolean;
   folderId?: string;
@@ -74,15 +76,44 @@ export class BookmarkCard {
       `;
     } else {
       // Fallback card when event is not loaded
+      // Display depends on bookmark type
+      const { type, value } = this.data;
+      let displayContent = '';
+      let displayLabel = 'Unknown';
+      let isClickable = false;
+
+      if (type === 'r' && value) {
+        // URL bookmark - show the URL
+        displayLabel = 'URL';
+        try {
+          const url = new URL(value);
+          displayContent = url.hostname + (url.pathname !== '/' ? url.pathname.slice(0, 30) : '');
+        } catch {
+          displayContent = value.slice(0, 40);
+        }
+        isClickable = true;
+      } else if (type === 't' && value) {
+        // Hashtag bookmark
+        displayLabel = 'Hashtag';
+        displayContent = `#${value}`;
+      } else if (type === 'a' && value) {
+        // Replaceable event address
+        displayLabel = 'Address';
+        displayContent = value.slice(0, 40) + '...';
+      } else {
+        // Event reference that couldn't be loaded
+        displayLabel = 'Note not found';
+        displayContent = id.slice(0, 8) + '...';
+      }
+
       card.innerHTML = `
         ${isPrivate ? '<span class="bookmark-card__private-badge">🔒</span>' : ''}
         <div class="bookmark-card__author">
-          <div class="bookmark-card__author-pic"></div>
-          <span class="bookmark-card__author-name">Unknown</span>
+          <div class="bookmark-card__author-pic bookmark-card__author-pic--type-${type || 'e'}"></div>
+          <span class="bookmark-card__author-name">${this.escapeHtml(displayLabel)}</span>
         </div>
-        <div class="bookmark-card__content bookmark-card__content--not-found">
-          Note not found
-          <span class="bookmark-card__event-id">${id.slice(0, 8)}...</span>
+        <div class="bookmark-card__content bookmark-card__content--${type === 'e' || !type ? 'not-found' : 'external'}">
+          ${this.escapeHtml(displayContent)}
         </div>
         <div class="bookmark-card__footer">
           <span class="bookmark-card__timestamp">—</span>
@@ -93,6 +124,11 @@ export class BookmarkCard {
           </button>
         </div>
       `;
+
+      // For URL bookmarks, clicking opens the URL
+      if (isClickable && value) {
+        card.dataset.externalUrl = value;
+      }
     }
 
     // Bind events
@@ -105,7 +141,7 @@ export class BookmarkCard {
   private bindEvents(card: HTMLElement): void {
     const { id, event } = this.data;
 
-    // Click on card (except delete button) navigates to note
+    // Click on card (except delete button) navigates to note or opens URL
     card.addEventListener('click', (e) => {
       const target = e.target as HTMLElement;
       if (target.closest('.bookmark-card__delete')) return;
@@ -115,10 +151,13 @@ export class BookmarkCard {
         return;
       }
 
-      // Only navigate if event exists
+      // Navigate to note if event exists
       if (event) {
         const nevent = encodeNevent(event.id);
         this.router.navigate(`/note/${nevent}`);
+      } else if (card.dataset.externalUrl) {
+        // Open external URL in new tab
+        window.open(card.dataset.externalUrl, '_blank', 'noopener,noreferrer');
       }
     });
 

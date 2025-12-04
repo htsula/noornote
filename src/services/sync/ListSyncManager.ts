@@ -29,6 +29,10 @@ export interface SyncFromRelaysResult<T> {
   relayItems: T[];
   /** True if relay event content was empty (another client may have overwritten) */
   relayContentWasEmpty: boolean;
+  /** Category assignments from relay (bookmarkId -> categoryName) - for Bookmarks */
+  categoryAssignments?: Map<string, string>;
+  /** Category names (d-tags) found on relays - for Bookmarks */
+  categories?: string[];
 }
 
 export class ListSyncManager<T> {
@@ -72,7 +76,9 @@ export class ListSyncManager<T> {
       requiresConfirmation,
       diff,
       relayItems,
-      relayContentWasEmpty: preservePrivateItems // Use combined flag for downstream handling
+      relayContentWasEmpty: preservePrivateItems, // Use combined flag for downstream handling
+      categoryAssignments: fetchResult.categoryAssignments,
+      categories: fetchResult.categories
     };
   }
 

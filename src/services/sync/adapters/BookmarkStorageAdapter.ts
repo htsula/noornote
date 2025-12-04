@@ -49,21 +49,13 @@ export class BookmarkStorageAdapter extends BaseListStorageAdapter<BookmarkItem>
 
   /**
    * File Storage (Persistent Local) - Asynchronous
-   * Reads both public + private, returns merged list
+   * Reads all bookmarks from file with category info
    */
   async getFileItems(): Promise<BookmarkItem[]> {
     try {
-      const [publicData, privateData] = await Promise.all([
-        this.fileStorage.readPublic(),
-        this.fileStorage.readPrivate()
-      ]);
-
-      // Merge and deduplicate by id
-      const bookmarkMap = new Map<string, BookmarkItem>();
-      privateData.items.forEach(item => bookmarkMap.set(item.id, item));
-      publicData.items.forEach(item => bookmarkMap.set(item.id, item)); // Public overwrites private
-
-      return Array.from(bookmarkMap.values());
+      // Use getAllBookmarks() which properly reads the new BookmarkSetData format
+      // and extracts items with their category field
+      return await this.fileStorage.getAllBookmarks();
     } catch (error) {
       console.error('[BookmarkStorageAdapter] Failed to read from file storage:', error);
       throw error;
