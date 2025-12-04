@@ -7,6 +7,16 @@
 **Eco:** NN (this app), NS (NoorSigner at ../noorsigner/)
 **Debug:** ss = screenshots/screenshot.png (ss1, ss2...), csl = console logs
 
+## Anti-Sycophancy Rules
+
+1. **Say "I don't know"** - Better to just admit it than guess
+2. **Verify before making claims** - Never say "that works" without actually testing it
+3. **Push back** - If the requirements aren't clear, ask questions instead of assuming
+4. **No "Yeah, you're right"** - If you're not sure, just say that
+5. **Contradict if you need to** - Honest disagreement is better than fake agreement
+6. **No empty confirmations** - Stuff like "Got it", "Clear", "Exactly" only if you really get it
+7. **Admit mistakes right away** - Don't try to cover them up or talk around them
+
 ## WORKFLOW - ⚠️ NEVER FORGET! ⚠️
 
 **Philosophy:** Enterprise-level modularity. Ask: "Could this be useful elsewhere? Where's the right architectural home?" If unsure, ask user. Think addon/extension system future-proofing.
