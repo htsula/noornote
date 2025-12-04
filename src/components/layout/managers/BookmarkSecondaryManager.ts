@@ -189,11 +189,15 @@ export class BookmarkSecondaryManager {
         return timeB - timeA; // DESC - newest first
       });
 
-      // Fetch events from relays
+      // Fetch events from relays (only for 'e' type bookmarks - event references)
+      // Other types like 'r' (URLs), 't' (hashtags), 'a' (replaceable events) are not fetchable by ID
       const relays = this.relayConfig.getAllRelays().map(r => r.url);
-      const events = await this.transport.fetch(relays, [{
-        ids: sortedBookmarks.map(b => b.id)
-      }], 5000);
+      const eventBookmarks = sortedBookmarks.filter(b => b.type === 'e');
+      const events = eventBookmarks.length > 0
+        ? await this.transport.fetch(relays, [{
+            ids: eventBookmarks.map(b => b.id)
+          }], 5000)
+        : [];
 
       // Build cache
       const eventMap = new Map<string, NostrEvent>();
@@ -405,6 +409,8 @@ export class BookmarkSecondaryManager {
   private async createBookmarkCard(bookmark: BookmarkWithEvent): Promise<HTMLElement> {
     const cardData: BookmarkCardData = {
       id: bookmark.id,
+      type: bookmark.type,
+      value: bookmark.value,
       event: bookmark.event,
       isPrivate: bookmark.isPrivate,
       folderId: this.folderService.getBookmarkFolder(bookmark.id)
@@ -790,6 +796,44 @@ export class BookmarkSecondaryManager {
 
       const result = await this.listSyncManager.syncFromRelays();
 
+      // Helper to apply folder assignments after sync
+      const applyFolderAssignments = () => {
+        if (!result.categoryAssignments) return;
+
+        // Collect categories that actually have items
+        const categoriesWithItems = new Set<string>();
+        for (const [, categoryName] of result.categoryAssignments) {
+          if (categoryName !== '') {
+            categoriesWithItems.add(categoryName);
+          }
+        }
+
+        // Create folders only for categories that have items (skip empty ones)
+        const existingFolders = this.folderService.getFolders();
+        for (const categoryName of categoriesWithItems) {
+          const existingFolder = existingFolders.find(f => f.name === categoryName);
+          if (!existingFolder) {
+            const newFolder = this.folderService.createFolder(categoryName);
+            this.folderService.addToRootOrder('folder', newFolder.id);
+          }
+        }
+
+        // Assign bookmarks to their categories
+        const updatedFolders = this.folderService.getFolders();
+        for (const [bookmarkId, categoryName] of result.categoryAssignments) {
+          if (categoryName === '') {
+            // Root - ensure assignment exists
+            this.folderService.ensureBookmarkAssignment(bookmarkId);
+          } else {
+            // Find folder by name and move bookmark there
+            const folder = updatedFolders.find(f => f.name === categoryName);
+            if (folder) {
+              this.folderService.moveBookmarkToFolder(bookmarkId, folder.id);
+            }
+          }
+        }
+      };
+
       if (result.requiresConfirmation) {
         const modal = new SyncConfirmationModal({
           listType: 'Bookmarks',
@@ -798,12 +842,14 @@ export class BookmarkSecondaryManager {
           getDisplayName: (item) => this.getDisplayNameForSync(item),
           onKeep: async () => {
             await this.listSyncManager.applySyncFromRelays('merge', result.relayItems, result.relayContentWasEmpty);
+            applyFolderAssignments();
             ToastService.show(`Merged bookmarks from relays`, 'success');
             await this.loadBookmarks();
             this.renderCurrentView(container);
           },
           onDelete: async () => {
             await this.listSyncManager.applySyncFromRelays('overwrite', result.relayItems, result.relayContentWasEmpty);
+            applyFolderAssignments();
             ToastService.show('Synced from relays', 'success');
             await this.loadBookmarks();
             this.renderCurrentView(container);
@@ -813,6 +859,7 @@ export class BookmarkSecondaryManager {
         await modal.show();
       } else {
         await this.listSyncManager.applySyncFromRelays('merge', result.relayItems, result.relayContentWasEmpty);
+        applyFolderAssignments();
         ToastService.show(`Synced from relays`, 'success');
         await this.loadBookmarks();
         this.renderCurrentView(container);
@@ -854,6 +901,42 @@ export class BookmarkSecondaryManager {
 
       // Then restore bookmark items
       await this.listSyncManager.restoreFromFile();
+
+      // Apply category assignments from restored items
+      const restoredItems = this.adapter.getBrowserItems();
+      const existingFolders = this.folderService.getFolders();
+
+      // Create folders for categories that don't exist yet
+      const categories = new Set<string>();
+      for (const item of restoredItems) {
+        if (item.category && item.category !== '') {
+          categories.add(item.category);
+        }
+      }
+
+      for (const categoryName of categories) {
+        const existingFolder = existingFolders.find(f => f.name === categoryName);
+        if (!existingFolder) {
+          const newFolder = this.folderService.createFolder(categoryName);
+          this.folderService.addToRootOrder('folder', newFolder.id);
+        }
+      }
+
+      // Assign bookmarks to their categories
+      const updatedFolders = this.folderService.getFolders();
+      for (const item of restoredItems) {
+        const categoryName = item.category || '';
+        if (categoryName === '') {
+          // Root - ensure assignment exists
+          this.folderService.ensureBookmarkAssignment(item.id);
+        } else {
+          // Find folder by name and move bookmark there
+          const folder = updatedFolders.find(f => f.name === categoryName);
+          if (folder) {
+            this.folderService.moveBookmarkToFolder(item.id, folder.id);
+          }
+        }
+      }
 
       ToastService.show('Restored from local file', 'success');
       await this.loadBookmarks();

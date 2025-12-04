@@ -284,6 +284,7 @@ export class BookmarkOrchestrator extends GenericListOrchestrator<BookmarkItem> 
    * - Root bookmarks → d: ""
    * - Category "Work" → d: "Work"
    * - Private bookmarks → encrypted in content
+   * - Deleted categories → publish empty event to overwrite
    */
   public async publishToRelays(): Promise<void> {
     const currentUser = this.authService.getCurrentUser();
@@ -298,10 +299,28 @@ export class BookmarkOrchestrator extends GenericListOrchestrator<BookmarkItem> 
 
     // Build BookmarkSetData from localStorage
     const setData = this.buildSetDataFromLocalStorage();
+    const localCategories = new Set(setData.sets.map(s => s.d));
+
+    // Fetch existing categories from relays to find deleted ones
+    const relayResult = await this.fetchFromRelays(currentUser.pubkey);
+    const relayCategories = new Set(relayResult.categories || []);
+
+    // Find categories that exist on relays but not locally (deleted)
+    const deletedCategories: string[] = [];
+    for (const relayCategory of relayCategories) {
+      if (!localCategories.has(relayCategory)) {
+        deletedCategories.push(relayCategory);
+      }
+    }
 
     this.systemLogger.info('BookmarkOrchestrator',
-      `Publishing: ${setData.sets.length} sets to relays`
+      `Publishing: ${setData.sets.length} sets, ${deletedCategories.length} deleted categories`
     );
+
+    // First, publish empty events for deleted categories
+    for (const categoryName of deletedCategories) {
+      await this.publishEmptyCategory(categoryName);
+    }
 
     // Convert to Nostr events using serializer
     const events = await toNostrEvents(
@@ -354,7 +373,49 @@ export class BookmarkOrchestrator extends GenericListOrchestrator<BookmarkItem> 
     }
 
     this.systemLogger.info('BookmarkOrchestrator',
-      `Published ${totalPublished} bookmark set events to relays`
+      `Published ${totalPublished} bookmark set events + ${deletedCategories.length} deletions to relays`
+    );
+  }
+
+  /**
+   * Publish an empty event for a category to "delete" it from relays
+   * This overwrites the existing event with an empty one
+   */
+  public async publishEmptyCategory(categoryName: string): Promise<void> {
+    const currentUser = this.authService.getCurrentUser();
+    if (!currentUser) {
+      throw new Error('User not authenticated');
+    }
+
+    const writeRelays = this.transport.getWriteRelays();
+    if (writeRelays.length === 0) {
+      throw new Error('No write relays available');
+    }
+
+    // Build empty event with this d-tag
+    const tags: string[][] = [
+      ['d', categoryName],
+      ['title', categoryName],
+      ['client', 'NoorNote']
+    ];
+
+    const event = {
+      kind: 30003,
+      created_at: Math.floor(Date.now() / 1000),
+      tags,
+      content: '',
+      pubkey: currentUser.pubkey
+    };
+
+    const signed = await this.authService.signEvent(event);
+    if (!signed) {
+      throw new Error(`Failed to sign empty event for category: ${categoryName}`);
+    }
+
+    await this.transport.publish(writeRelays, signed);
+
+    this.systemLogger.info('BookmarkOrchestrator',
+      `Published empty event to delete category "${categoryName}" from relays`
     );
   }
 
@@ -363,8 +424,6 @@ export class BookmarkOrchestrator extends GenericListOrchestrator<BookmarkItem> 
    */
   private buildSetDataFromLocalStorage(): BookmarkSetData {
     const allItems = this.getBrowserItems();
-
-    console.log('[DEBUG buildSetDataFromLocalStorage] Items count:', allItems.length);
 
     // Create sets map
     const setsMap = new Map<string, BookmarkSet>();
@@ -381,14 +440,10 @@ export class BookmarkOrchestrator extends GenericListOrchestrator<BookmarkItem> 
     // Assign bookmarks to sets (using item.category, fallback to FolderService for migration)
     for (const item of allItems) {
       let category = item.category;
-      const originalCategory = category;
       if (category === undefined) {
         const folderId = this.folderService.getBookmarkFolder(item.id);
         const folder = folderId ? this.folderService.getFolder(folderId) : null;
         category = folder?.name ?? '';
-        console.log(`[DEBUG] Item ${item.id.slice(0,8)}... category=${originalCategory} → folderId="${folderId}" → folderName="${folder?.name}" → final="${category}" isPrivate=${item.isPrivate}`);
-      } else {
-        console.log(`[DEBUG] Item ${item.id.slice(0,8)}... category="${category}" (from item) isPrivate=${item.isPrivate}`);
       }
 
       // Create set if it doesn't exist
