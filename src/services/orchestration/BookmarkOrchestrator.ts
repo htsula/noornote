@@ -421,6 +421,7 @@ export class BookmarkOrchestrator extends GenericListOrchestrator<BookmarkItem> 
 
   /**
    * Build BookmarkSetData from localStorage (uses item.category directly)
+   * Only creates sets for folders that exist in FolderService
    */
   private buildSetDataFromLocalStorage(): BookmarkSetData {
     const allItems = this.getBrowserItems();
@@ -437,6 +438,10 @@ export class BookmarkOrchestrator extends GenericListOrchestrator<BookmarkItem> 
       privateTags: []
     });
 
+    // Get valid folder names from FolderService
+    const existingFolders = this.folderService.getFolders();
+    const validFolderNames = new Set(existingFolders.map(f => f.name));
+
     // Assign bookmarks to sets (using item.category, fallback to FolderService for migration)
     for (const item of allItems) {
       let category = item.category;
@@ -444,6 +449,11 @@ export class BookmarkOrchestrator extends GenericListOrchestrator<BookmarkItem> 
         const folderId = this.folderService.getBookmarkFolder(item.id);
         const folder = folderId ? this.folderService.getFolder(folderId) : null;
         category = folder?.name ?? '';
+      }
+
+      // Only use category if the folder still exists, otherwise assign to root
+      if (category !== '' && !validFolderNames.has(category)) {
+        category = '';
       }
 
       // Create set if it doesn't exist
@@ -592,13 +602,21 @@ export class BookmarkOrchestrator extends GenericListOrchestrator<BookmarkItem> 
 
       this.setBrowserItems(merged);
 
-      // Create folders from relay categories (skip root "")
+      // Create folders only for categories that have items (skip empty sets)
       const existingFolders = this.folderService.getFolders();
-      const categories = fetchResult.categories || [];
+      const categoryAssignments = fetchResult.categoryAssignments;
 
-      for (const categoryName of categories) {
-        if (categoryName === '') continue; // Skip root
+      // Collect categories that actually have items
+      const categoriesWithItems = new Set<string>();
+      if (categoryAssignments) {
+        for (const [, categoryName] of categoryAssignments) {
+          if (categoryName !== '') {
+            categoriesWithItems.add(categoryName);
+          }
+        }
+      }
 
+      for (const categoryName of categoriesWithItems) {
         // Check if folder with this name exists
         const existingFolder = existingFolders.find(f => f.name === categoryName);
         if (!existingFolder) {
@@ -608,7 +626,6 @@ export class BookmarkOrchestrator extends GenericListOrchestrator<BookmarkItem> 
       }
 
       // Assign bookmarks to their categories from relay
-      const categoryAssignments = fetchResult.categoryAssignments;
       if (categoryAssignments) {
         const updatedFolders = this.folderService.getFolders(); // Refresh after creating new folders
 

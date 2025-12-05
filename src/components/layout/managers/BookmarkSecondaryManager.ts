@@ -805,6 +805,10 @@ export class BookmarkSecondaryManager {
 
   private async deleteFolder(folderId: string): Promise<void> {
     try {
+      // Get folder name before deletion (needed to update category in storage)
+      const folder = this.folderService.getFolder(folderId);
+      const folderName = folder?.name || '';
+
       // Delete folder (moves items to root)
       const affectedIds = this.folderService.deleteFolder(folderId);
 
@@ -815,6 +819,23 @@ export class BookmarkSecondaryManager {
       affectedIds.forEach(id => {
         this.folderService.addToRootOrder('bookmark', id);
       });
+
+      // Update category in browser storage (set to '' for root)
+      const currentItems = this.adapter.getBrowserItems();
+      const updatedItems = currentItems.map(item => {
+        if (item.category === folderName) {
+          return { ...item, category: '' };
+        }
+        return item;
+      });
+      this.adapter.setBrowserItems(updatedItems);
+
+      // Update cache
+      for (const [id, bookmark] of this.bookmarksCache) {
+        if (bookmark.category === folderName) {
+          bookmark.category = '';
+        }
+      }
 
       ToastService.show('Folder deleted, bookmarks moved to root', 'success');
 
@@ -836,6 +857,10 @@ export class BookmarkSecondaryManager {
       // Don't move if already in target folder
       if (currentFolderId === targetFolderId) return;
 
+      // Get target folder name for category
+      const targetFolder = targetFolderId ? this.folderService.getFolder(targetFolderId) : null;
+      const targetCategoryName = targetFolder?.name || '';
+
       // Update assignment
       this.folderService.moveBookmarkToFolder(bookmarkId, targetFolderId);
 
@@ -848,10 +873,23 @@ export class BookmarkSecondaryManager {
         this.folderService.addToRootOrder('bookmark', bookmarkId);
       }
 
-      const targetName = targetFolderId === ''
-        ? 'root'
-        : this.folderService.getFolder(targetFolderId)?.name || 'folder';
+      // Update category in browser storage
+      const currentItems = this.adapter.getBrowserItems();
+      const updatedItems = currentItems.map(item => {
+        if (item.id === bookmarkId) {
+          return { ...item, category: targetCategoryName };
+        }
+        return item;
+      });
+      this.adapter.setBrowserItems(updatedItems);
 
+      // Update cache
+      const cachedBookmark = this.bookmarksCache.get(bookmarkId);
+      if (cachedBookmark) {
+        cachedBookmark.category = targetCategoryName;
+      }
+
+      const targetName = targetFolderId === '' ? 'root' : targetFolder?.name || 'folder';
       ToastService.show(`Moved to ${targetName}`, 'success');
 
       // Just remove the card from DOM - it's now in a different folder/root
