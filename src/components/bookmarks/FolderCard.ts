@@ -65,8 +65,8 @@ export class FolderCard {
       </div>
       ${showMount ? `
         <label class="folder-card__mount" title="Mount to Profile">
-          <input type="checkbox" ${isMounted ? 'checked' : ''} />
           <span>Profile</span>
+          <input type="checkbox" ${isMounted ? 'checked' : ''} />
         </label>
       ` : ''}
     `;
