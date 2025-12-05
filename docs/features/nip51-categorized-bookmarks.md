@@ -1,6 +1,6 @@
 # NIP-51 Bookmark Sets (Kategorien auf Relays)
 
-## Status: IN ARBEIT
+## Status: ERLEDIGT (Code Review Todos unten)
 
 ## Übersicht
 
@@ -201,3 +201,67 @@ localStorage = File = Relay (strukturell identisch)
 
 ### Tools
 - `tools/relay-inspector.html` - Bookmark Sets preset (kind:30003)
+
+---
+
+## Code Review Todos (2025-12-05)
+
+### 🔴 Bug (MUSS gefixt werden)
+
+**BookmarkOrchestrator.ts:647** - Referenz auf undefinierte Variable `categories`:
+```typescript
+`Sync complete: ${added} new items, ${categories.length} categories`
+```
+`categories` existiert nicht in diesem Scope. Sollte `categoriesWithItems.size` oder `fetchResult.categories?.length || 0` sein.
+
+---
+
+### 🟡 Code-Leichen (können entfernt werden)
+
+| Datei | Zeile | Problem |
+|-------|-------|---------|
+| `BookmarkSecondaryManager.ts` | 48, 69 | `userProfileService` importiert/instanziiert aber nie verwendet |
+| `BookmarkSecondaryManager.ts` | 1035 | `dropdownMenu` Variable deklariert aber nie verwendet |
+| `BookmarkStorageAdapter.ts` | 100-125 | 3 unbenutzte private Methoden: `getFoldersFromLocalStorage`, `getAssignmentsFromLocalStorage`, `getRootOrderFromLocalStorage` |
+
+---
+
+### 🟡 Memory Leak
+
+**BookmarkSecondaryManager.ts:1048** - Event Listener wird nie entfernt:
+```typescript
+document.addEventListener('click', closeDropdown);
+```
+Bei jedem `renderCurrentView` wird ein neuer globaler Click-Listener hinzugefügt. Sollte im `destroy()` oder beim Re-Render bereinigt werden.
+
+---
+
+### 🟡 console.error → SystemLogger
+
+Mehrere Stellen verwenden `console.error` statt `SystemLogger`. Inkonsistent:
+
+- `BookmarkOrchestrator.ts:79`
+- `BookmarkStorageAdapter.ts:60, 74, 96, 141, 161`
+- `BookmarkFileStorage.ts:229, 234`
+- `BookmarkSerializer.ts:203`
+- `ListSyncManager.ts:181, 185`
+
+---
+
+### 🟢 Code-Duplikation (optional, Wartbarkeit)
+
+`BookmarkSecondaryManager.ts` - Ähnliche Folder-Assignment-Logik in:
+- `handleSyncFromRelays` (Zeilen 1076-1111)
+- `handleRestoreFromFile` (Zeilen 1186-1215)
+
+Könnte in eine gemeinsame Hilfsmethode extrahiert werden.
+
+---
+
+### 🟢 Veraltete Kommentare
+
+**BookmarkStorageAdapter.ts:8-9** - Erwähnt falsche Dateien:
+```
+* - File: ~/.noornote/bookmarks-public.json + bookmarks-private.json
+```
+Sollte `bookmarks.json` sein.
