@@ -1,6 +1,18 @@
 # Mount Bookmark Folder to Profile (NIP-78)
 
-## Status: TODO
+## Status: IMPLEMENTIERT (2025-12-05)
+
+### Erstellte Dateien
+- `src/services/ProfileMountsService.ts` - localStorage Management
+- `src/services/orchestration/ProfileMountsOrchestrator.ts` - kind:30078 Relay Sync
+- `src/components/profile/ProfileListsComponent.ts` - UI Component für Profil-Listen
+
+### Geänderte Dateien
+- `src/components/bookmarks/FolderCard.ts` - Mount Checkbox hinzugefügt
+- `src/components/layout/managers/BookmarkSecondaryManager.ts` - Mount Toggle Handler
+- `src/components/views/ProfileView.ts` - Profile Lists Integration
+- `src/styles/components/_bookmark-cards.scss` - Mount Checkbox Styles
+- `src/styles/components/_profile-view.scss` - Profile Lists Styles
 
 ## Übersicht
 
