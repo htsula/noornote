@@ -206,7 +206,9 @@ localStorage = File = Relay (strukturell identisch)
 
 ## Code Review Todos (2025-12-05)
 
-### 🔴 Bug (MUSS gefixt werden)
+✅ Alle erledigt (Commit 46307bc)
+
+### ✅ ~~Bug (MUSS gefixt werden)~~
 
 **BookmarkOrchestrator.ts:647** - Referenz auf undefinierte Variable `categories`:
 ```typescript
@@ -216,7 +218,7 @@ localStorage = File = Relay (strukturell identisch)
 
 ---
 
-### 🟡 Code-Leichen (können entfernt werden)
+### ✅ ~~Code-Leichen (können entfernt werden)~~
 
 | Datei | Zeile | Problem |
 |-------|-------|---------|
@@ -226,7 +228,7 @@ localStorage = File = Relay (strukturell identisch)
 
 ---
 
-### 🟡 Memory Leak
+### ✅ ~~Memory Leak~~
 
 **BookmarkSecondaryManager.ts:1048** - Event Listener wird nie entfernt:
 ```typescript
@@ -236,7 +238,7 @@ Bei jedem `renderCurrentView` wird ein neuer globaler Click-Listener hinzugefüg
 
 ---
 
-### 🟡 console.error → SystemLogger
+### ✅ ~~console.error → SystemLogger~~
 
 Mehrere Stellen verwenden `console.error` statt `SystemLogger`. Inkonsistent:
 
@@ -248,7 +250,7 @@ Mehrere Stellen verwenden `console.error` statt `SystemLogger`. Inkonsistent:
 
 ---
 
-### 🟢 Code-Duplikation (optional, Wartbarkeit)
+### ✅ ~~Code-Duplikation (optional, Wartbarkeit)~~
 
 `BookmarkSecondaryManager.ts` - Ähnliche Folder-Assignment-Logik in:
 - `handleSyncFromRelays` (Zeilen 1076-1111)
@@ -258,7 +260,7 @@ Könnte in eine gemeinsame Hilfsmethode extrahiert werden.
 
 ---
 
-### 🟢 Veraltete Kommentare
+### ✅ ~~Veraltete Kommentare~~
 
 **BookmarkStorageAdapter.ts:8-9** - Erwähnt falsche Dateien:
 ```
