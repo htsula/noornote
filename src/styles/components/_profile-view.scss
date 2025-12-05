@@ -63,7 +63,6 @@
 .profile-info {
   position: relative;
   margin-top: calc($gap * -3);
-  padding: 0 $gap;
 
   @include tablet-down {
     margin-top: calc($gap * -2.5);
@@ -71,7 +70,6 @@
 
   @include mobile-down {
     margin-top: calc($gap * -2);
-    padding: 0 calc($gap / 2);
   }
 }
 
