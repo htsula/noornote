@@ -3,7 +3,7 @@
  * NIP-17 Private Direct Messages - Conversations List
  *
  * @view MessagesView
- * @purpose Display list of DM conversations
+ * @purpose Display list of DM conversations with Known/Unknown tabs
  * @used-by App.ts via Router
  */
 
@@ -18,8 +18,11 @@ import { AuthService } from '../../services/AuthService';
 import { setupUserMentionHandlers } from '../../helpers/UserMentionHelper';
 import { InfiniteScroll } from '../ui/InfiniteScroll';
 import { ToastService } from '../../services/ToastService';
+import { setupTabClickHandlers, switchTab } from '../../helpers/TabsHelper';
 
 const BATCH_SIZE = 15;
+
+type TabFilter = 'known' | 'unknown';
 
 export class MessagesView extends View {
   private container: HTMLElement;
@@ -36,6 +39,8 @@ export class MessagesView extends View {
   private infiniteScroll: InfiniteScroll;
   private menuOpen: boolean = false;
   private outsideClickHandler: () => void;
+  private activeTab: TabFilter = 'known';
+  private unreadCounts: { known: number; unknown: number } = { known: 0, unknown: 0 };
 
   constructor() {
     super();
@@ -54,8 +59,9 @@ export class MessagesView extends View {
     this.outsideClickHandler = () => this.closeMenu();
 
     this.render();
+    this.setupEventListeners();
     this.setupInfiniteScroll();
-    this.loadConversationsBatch();
+    this.loadInitialData();
 
     // Listen for new messages - refresh from start
     this.eventBus.on('dm:new-message', () => {
@@ -105,13 +111,37 @@ export class MessagesView extends View {
           </div>
         </div>
       </div>
+      <div class="messages-view__tabs">
+        <div class="tabs">
+          <button class="tab tab--active" data-tab="known">
+            Known
+            <span class="tab__badge" data-badge="known" style="display: none;"></span>
+          </button>
+          <button class="tab" data-tab="unknown">
+            Unknown
+            <span class="tab__badge" data-badge="unknown" style="display: none;"></span>
+          </button>
+        </div>
+      </div>
       <div class="messages-view__content">
-        <div class="messages-view__list">
-          <div class="messages-view__loading">Loading conversations...</div>
+        <div class="tab-content tab-content--active" data-tab-content="known">
+          <div class="messages-view__list" data-list="known">
+            <div class="messages-view__loading">Loading conversations...</div>
+          </div>
+        </div>
+        <div class="tab-content" data-tab-content="unknown">
+          <div class="messages-view__list" data-list="unknown">
+            <div class="messages-view__loading">Loading conversations...</div>
+          </div>
         </div>
       </div>
     `;
+  }
 
+  /**
+   * Setup event listeners
+   */
+  private setupEventListeners(): void {
     // Setup compose button
     const composeBtn = this.container.querySelector('.messages-view__compose-btn');
     composeBtn?.addEventListener('click', () => this.openComposeModal());
@@ -137,15 +167,94 @@ export class MessagesView extends View {
         }
       }
     });
+
+    // Setup tab click handlers using TabsHelper
+    setupTabClickHandlers(this.container, (tabId) => this.handleTabSwitch(tabId as TabFilter));
   }
 
   /**
-   * Setup infinite scroll on the list container
+   * Handle tab switch
+   */
+  private handleTabSwitch(tab: TabFilter): void {
+    if (this.activeTab === tab) return;
+
+    this.activeTab = tab;
+
+    // Update tab UI using TabsHelper
+    switchTab(this.container, tab);
+
+    // Update tab content panels
+    this.container.querySelectorAll('.tab-content[data-tab-content]').forEach(el => {
+      if ((el as HTMLElement).dataset.tabContent === tab) {
+        el.classList.add('tab-content--active');
+      } else {
+        el.classList.remove('tab-content--active');
+      }
+    });
+
+    // Reset pagination for new tab
+    this.currentOffset = 0;
+    this.hasMoreConversations = true;
+    this.conversations = [];
+
+    // Setup infinite scroll for the new active list
+    this.setupInfiniteScroll();
+
+    // Load conversations for this tab
+    this.loadConversationsBatch();
+  }
+
+  /**
+   * Setup infinite scroll on the active list container
    */
   private setupInfiniteScroll(): void {
-    const list = this.container.querySelector('.messages-view__list');
+    const list = this.container.querySelector(`[data-list="${this.activeTab}"]`);
     if (list) {
       this.infiniteScroll.observe(list as HTMLElement);
+    }
+  }
+
+  /**
+   * Load initial data (unread counts + first tab)
+   */
+  private async loadInitialData(): Promise<void> {
+    // Ensure DM service is started
+    await this.dmService.start();
+
+    // Update badge counts
+    await this.updateBadgeCounts();
+
+    // Load conversations for active tab
+    await this.loadConversationsBatch();
+  }
+
+  /**
+   * Update unread badge counts
+   */
+  private async updateBadgeCounts(): Promise<void> {
+    const counts = await this.dmService.getUnreadCountsSplit();
+    this.unreadCounts = { known: counts.known, unknown: counts.unknown };
+
+    // Update known badge
+    const knownBadge = this.container.querySelector('[data-badge="known"]') as HTMLElement;
+    if (knownBadge) {
+      if (counts.known > 0) {
+        knownBadge.textContent = counts.known.toString();
+        knownBadge.style.display = 'inline-flex';
+      } else {
+        knownBadge.style.display = 'none';
+      }
+    }
+
+    // Update unknown badge
+    const unknownBadge = this.container.querySelector('[data-badge="unknown"]') as HTMLElement;
+    if (unknownBadge) {
+      if (counts.unknown > 0) {
+        unknownBadge.textContent = counts.unknown.toString();
+        unknownBadge.style.display = 'inline-flex';
+      } else {
+        unknownBadge.style.display = 'none';
+      }
     }
   }
 
@@ -154,8 +263,6 @@ export class MessagesView extends View {
    */
   private async handleLoadMore(): Promise<void> {
     if (this.isLoading || !this.hasMoreConversations) return;
-
-    this.systemLogger.info('MessagesView', '⏳ Loading more conversations...');
     await this.loadConversationsBatch();
   }
 
@@ -163,13 +270,16 @@ export class MessagesView extends View {
    * Refresh conversations from start (for new messages/badge updates)
    */
   private async refreshConversations(): Promise<void> {
+    // Update badge counts
+    await this.updateBadgeCounts();
+
     // Reset pagination
     this.currentOffset = 0;
     this.hasMoreConversations = true;
     this.conversations = [];
 
     // Clear list
-    const list = this.container.querySelector('.messages-view__list');
+    const list = this.container.querySelector(`[data-list="${this.activeTab}"]`);
     if (list) {
       list.innerHTML = '<div class="messages-view__loading">Loading conversations...</div>';
     }
@@ -186,18 +296,20 @@ export class MessagesView extends View {
     this.isLoading = true;
 
     const isInitialLoad = this.currentOffset === 0;
+    const list = this.container.querySelector(`[data-list="${this.activeTab}"]`);
 
     try {
-      // Ensure DM service is started (idempotent)
-      await this.dmService.start();
-
       // Show loading indicator for subsequent loads
       if (!isInitialLoad) {
         this.infiniteScroll.showLoading();
       }
 
-      // Get batch of conversations
-      const batch = await this.dmService.getConversations(BATCH_SIZE, this.currentOffset);
+      // Get batch of conversations filtered by tab
+      const batch = await this.dmService.getConversationsFiltered(
+        this.activeTab,
+        BATCH_SIZE,
+        this.currentOffset
+      );
 
       // Check if we have more
       if (batch.length < BATCH_SIZE) {
@@ -208,15 +320,13 @@ export class MessagesView extends View {
       this.conversations.push(...batch);
       this.currentOffset += batch.length;
 
-      this.systemLogger.info('MessagesView', `Loaded ${batch.length} conversations (total: ${this.conversations.length})`);
-
       // Render the batch
-      await this.renderConversationsBatch(batch, isInitialLoad);
+      await this.renderConversationsBatch(batch, isInitialLoad, list as HTMLElement);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       if (this.conversations.length === 0) {
         this.systemLogger.error('MessagesView', `Failed to load conversations: ${errorMsg}`);
-        this.renderError();
+        this.renderError(list as HTMLElement);
       } else {
         this.systemLogger.warn('MessagesView', `Error loading more conversations: ${errorMsg}`);
       }
@@ -230,19 +340,26 @@ export class MessagesView extends View {
   /**
    * Render a batch of conversations
    */
-  private async renderConversationsBatch(batch: DMConversation[], isInitialLoad: boolean): Promise<void> {
-    const list = this.container.querySelector('.messages-view__list');
+  private async renderConversationsBatch(
+    batch: DMConversation[],
+    isInitialLoad: boolean,
+    list: HTMLElement
+  ): Promise<void> {
     if (!list) return;
 
     // Handle empty state
     if (isInitialLoad && batch.length === 0) {
+      const emptyMessage = this.activeTab === 'known'
+        ? 'No messages from people you follow'
+        : 'No messages from unknown users';
+
       list.innerHTML = `
         <div class="messages-view__empty">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48">
             <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
             <polyline points="22,6 12,13 2,6"/>
           </svg>
-          <p>No messages yet</p>
+          <p>${emptyMessage}</p>
           <p class="text-muted">Start a conversation by clicking "New Message"</p>
         </div>
       `;
@@ -354,8 +471,7 @@ export class MessagesView extends View {
   /**
    * Render error state
    */
-  private renderError(): void {
-    const list = this.container.querySelector('.messages-view__list');
+  private renderError(list: HTMLElement): void {
     if (!list) return;
 
     list.innerHTML = `

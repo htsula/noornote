@@ -402,12 +402,13 @@ export class MainLayout {
   private setupTabSwitching(): void {
     // Only setup System Logs tab (static tab)
     // List tabs are created dynamically and have their own handlers
+    const secondaryContent = this.element.querySelector('.secondary-content') as HTMLElement;
     const systemLogTab = this.element.querySelector('[data-tab="system-log"]');
 
-    if (systemLogTab) {
+    if (systemLogTab && secondaryContent) {
       systemLogTab.addEventListener('click', () => {
         console.log('[TAB CLICK] system-log');
-        switchTabWithContent(this.element, 'system-log');
+        switchTabWithContent(secondaryContent, 'system-log');
       });
     }
   }
@@ -1005,10 +1006,11 @@ export class MainLayout {
     });
 
     // Insert tab and content into DOM
+    const secondaryContent = this.element.querySelector('.secondary-content') as HTMLElement;
     const tabsContainer = this.element.querySelector('#sidebar-tabs');
     const contentBody = this.element.querySelector('.secondary-content-body');
 
-    if (tabsContainer && contentBody) {
+    if (secondaryContent && tabsContainer && contentBody) {
       const tab = this.currentListView.createTab();
       const content = this.currentListView.createContent();
 
@@ -1022,13 +1024,13 @@ export class MainLayout {
           return;
         }
 
-        // Deactivate all tabs and activate clicked tab
-        deactivateAllTabs(this.element);
+        // Deactivate all tabs and activate clicked tab (scoped to secondary-content only)
+        deactivateAllTabs(secondaryContent);
         this.currentListView?.activate();
       });
 
-      // Activate the new tab
-      deactivateAllTabs(this.element);
+      // Activate the new tab (scoped to secondary-content only)
+      deactivateAllTabs(secondaryContent);
       this.currentListView.activate();
 
       // Render content
@@ -1044,8 +1046,11 @@ export class MainLayout {
       this.currentListView.destroy();
       this.currentListView = null;
 
-      // Activate System Logs tab
-      switchTabWithContent(this.element, 'system-log');
+      // Activate System Logs tab (scoped to secondary-content only)
+      const secondaryContent = this.element.querySelector('.secondary-content') as HTMLElement;
+      if (secondaryContent) {
+        switchTabWithContent(secondaryContent, 'system-log');
+      }
     }
   }
 

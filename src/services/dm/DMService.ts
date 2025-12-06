@@ -18,9 +18,10 @@ import type { NostrEvent, NDKFilter, NDKUser } from '@nostr-dev-kit/ndk';
 import { NostrTransport } from '../transport/NostrTransport';
 import { AuthService } from '../AuthService';
 import { RelayConfig } from '../RelayConfig';
-import { DMStore, type DMMessage } from './DMStore';
+import { DMStore, type DMMessage, type DMConversation } from './DMStore';
 import { EventBus } from '../EventBus';
 import { SystemLogger } from '../../components/system/SystemLogger';
+import { FollowCheckService } from '../FollowCheckService';
 import { generateSecretKey, getPublicKey, calculateEventHash } from '../../services/NostrToolsAdapter';
 
 // NIP-17 Kind constants
@@ -40,6 +41,7 @@ export class DMService {
   private dmStore: DMStore;
   private eventBus: EventBus;
   private systemLogger: SystemLogger;
+  private followCheckService: FollowCheckService;
   private subscriptionId: string | null = null;
   private userPubkey: string | null = null;
 
@@ -50,6 +52,7 @@ export class DMService {
     this.dmStore = DMStore.getInstance();
     this.eventBus = EventBus.getInstance();
     this.systemLogger = SystemLogger.getInstance();
+    this.followCheckService = FollowCheckService.getInstance();
   }
 
   public static getInstance(): DMService {
@@ -707,9 +710,75 @@ export class DMService {
   }
 
   /**
+   * Get unread counts split by known (followed) and unknown users
+   */
+  public async getUnreadCountsSplit(): Promise<{ known: number; unknown: number; total: number }> {
+    await this.followCheckService.init();
+
+    const conversations = await this.dmStore.getConversations();
+    let known = 0;
+    let unknown = 0;
+
+    for (const conv of conversations) {
+      if (conv.unreadCount > 0) {
+        if (this.followCheckService.isFollowingSync(conv.pubkey)) {
+          known += conv.unreadCount;
+        } else {
+          unknown += conv.unreadCount;
+        }
+      }
+    }
+
+    return { known, unknown, total: known + unknown };
+  }
+
+  /**
+   * Get conversations split by known/unknown status
+   * @param filter - 'known' | 'unknown' | 'all'
+   */
+  public async getConversationsFiltered(
+    filter: 'known' | 'unknown' | 'all',
+    limit?: number,
+    offset: number = 0
+  ): Promise<DMConversation[]> {
+    await this.followCheckService.init();
+
+    // Get all conversations first
+    const allConversations = await this.dmStore.getConversations();
+
+    // Filter by known/unknown
+    let filtered: DMConversation[];
+    if (filter === 'all') {
+      filtered = allConversations;
+    } else if (filter === 'known') {
+      filtered = allConversations.filter(c => this.followCheckService.isFollowingSync(c.pubkey));
+    } else {
+      filtered = allConversations.filter(c => !this.followCheckService.isFollowingSync(c.pubkey));
+    }
+
+    // Apply offset and limit
+    if (offset > 0) {
+      filtered = filtered.slice(offset);
+    }
+    if (limit !== undefined) {
+      filtered = filtered.slice(0, limit);
+    }
+
+    return filtered;
+  }
+
+  /**
+   * Check if a pubkey is a known (followed) user
+   */
+  public async isKnownUser(pubkey: string): Promise<boolean> {
+    return this.followCheckService.isFollowing(pubkey);
+  }
+
+  /**
    * Clear all DM data (for logout)
    */
   public async clear(): Promise<void> {
     await this.dmStore.clear();
+    this.followCheckService.clear();
   }
 }
