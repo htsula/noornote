@@ -1,6 +1,6 @@
 # NIP-17 Private Direct Messages - Implementation Plan
 
-## Status: Research Complete (2025-12-06)
+## Status: ✅ Implemented (2025-12-06)
 
 ## Overview
 
@@ -312,47 +312,48 @@ sub.on("event", async (wrappedEvent) => {
 
 ## Implementation Plan for NoorNote
 
-### Phase 1: NDK Gift Wrap Integration
-- [ ] Verify `giftWrap`/`giftUnwrap` imports from NDK work
-- [ ] Test encrypt/decrypt round-trip mit NDK Signer
-- [ ] Entscheiden: Core NDK oder `@nostr-dev-kit/messages` Package?
+### Phase 1: NDK Gift Wrap Integration ✅
+- [x] Verify `giftWrap`/`giftUnwrap` imports from NDK work
+- [x] Test encrypt/decrypt round-trip mit NDK Signer
+- [x] Entscheiden: Core NDK (manuell implementiert, nicht @nostr-dev-kit/messages)
 
-### Phase 2: DM Storage (indexedDB)
-- [ ] Create DMStore schema (conversations, messages)
-- [ ] Store unwrapped rumors
-- [ ] Index by conversation partner
-- [ ] Support conversation threading (e-tag replies)
+### Phase 2: DM Storage (indexedDB) ✅
+- [x] Create DMStore schema (conversations, messages)
+- [x] Store unwrapped rumors
+- [x] Index by conversation partner
+- [x] Support conversation threading (e-tag replies)
 
-### Phase 3: Receiving DMs
-- [ ] Subscribe to kind:1059 with p-tag filter
-- [ ] Unwrap via `giftUnwrap` → store in DMStore
-- [ ] Background subscription (like notifications)
-- [ ] Unread counter
+### Phase 3: Receiving DMs ✅
+- [x] Subscribe to kind:1059 with p-tag filter
+- [x] Unwrap via custom implementation → store in DMStore
+- [x] Background subscription (like notifications)
+- [x] Unread counter
 
-### Phase 4: Sending DMs
-- [ ] Create kind:14 rumor via NDKEvent
-- [ ] Wrap mit `giftWrap()`
-- [ ] Fetch recipient's kind:10050 relay list
-- [ ] Publish to those relays + user's default relays
-- [ ] Send copy to self (wichtig!)
+### Phase 4: Sending DMs ✅
+- [x] Create kind:14 rumor via NDKEvent
+- [x] Wrap mit custom `createGiftWrap()`
+- [x] Fetch recipient's kind:10050 relay list
+- [x] Publish to those relays + user's default relays
+- [x] Send copy to self (wichtig!)
 
-### Phase 5: Relay Settings Integration
-- [ ] "DM Inbox" Toggle funktional machen (existiert bereits in UI!)
-- [ ] Speichern welche Relays als Inbox markiert sind (localStorage)
-- [ ] kind:10050 Event publishen wenn Inbox-Relays geändert werden
-- [ ] Screenshot: `screenshots/inbox-relay.png`
+### Phase 5: Relay Settings Integration ✅
+- [x] "DM Inbox" Toggle funktional machen
+- [x] Speichern welche Relays als Inbox markiert sind (localStorage)
+- [x] kind:10050 Event publishen wenn Inbox-Relays geändert werden
+- [x] Screenshot: `screenshots/inbox-relay.png`
 
-### Phase 6: UI
-- [ ] "Messages" Menüpunkt in Sidebar bereits vorhanden → anbinden
-- [ ] MessagesView erstellen (conversations list)
-- [ ] Conversation detail view (messages)
-- [ ] Compose DM modal (from profile, from anywhere)
-- [ ] Unread badges in sidebar neben "Messages"
+### Phase 6: UI ✅
+- [x] "Messages" Menüpunkt in Sidebar bereits vorhanden → angebunden
+- [x] MessagesView erstellt (conversations list mit Known/Unknown Tabs)
+- [x] ConversationView (message thread)
+- [ ] Compose DM modal (TODO: not yet implemented)
+- [x] Unread badges in sidebar neben "Messages"
+- [x] Mute-Integration in ConversationView
 
-### Phase 7: Polish
-- [ ] Conversation key caching (performance)
-- [ ] Read receipts (optional)
-- [ ] Disappearing messages (expiration tag)
+### Phase 7: Polish (Teilweise)
+- [x] Conversation key caching (performance)
+- [ ] Read receipts (optional - nicht geplant)
+- [ ] Disappearing messages (expiration tag - nicht geplant)
 - [ ] Group DM support (später)
 
 ---
