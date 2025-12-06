@@ -23,6 +23,7 @@ import { MutualChangeStorage } from '../storage/MutualChangeStorage';
 import { SystemLogger } from '../../components/system/SystemLogger';
 import { AuthService } from '../AuthService';
 import { EventBus } from '../EventBus';
+import { decodeNip19 } from '../NostrToolsAdapter';
 
 export type NotificationType = 'mention' | 'reply' | 'thread-reply' | 'repost' | 'reaction' | 'zap' | 'article' | 'mutual_unfollow' | 'mutual_new';
 
@@ -647,7 +648,6 @@ export class NotificationsOrchestrator extends Orchestrator {
     for (const match of mentions) {
       try {
         const nip19 = match[1];
-        const { decodeNip19 } = require('../NostrToolsAdapter');
 
         if (nip19.startsWith('npub')) {
           const decoded = decodeNip19(nip19);

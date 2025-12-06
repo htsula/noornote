@@ -18,7 +18,7 @@ import { AuthService } from '../../services/AuthService';
 import { setupUserMentionHandlers } from '../../helpers/UserMentionHelper';
 import { InfiniteScroll } from '../ui/InfiniteScroll';
 import { ToastService } from '../../services/ToastService';
-import { setupTabClickHandlers, switchTab } from '../../helpers/TabsHelper';
+import { setupTabClickHandlers, switchTabWithContent } from '../../helpers/TabsHelper';
 
 const BATCH_SIZE = 15;
 
@@ -180,17 +180,8 @@ export class MessagesView extends View {
 
     this.activeTab = tab;
 
-    // Update tab UI using TabsHelper
-    switchTab(this.container, tab);
-
-    // Update tab content panels
-    this.container.querySelectorAll('.tab-content[data-tab-content]').forEach(el => {
-      if ((el as HTMLElement).dataset.tabContent === tab) {
-        el.classList.add('tab-content--active');
-      } else {
-        el.classList.remove('tab-content--active');
-      }
-    });
+    // Update tab UI and content using TabsHelper
+    switchTabWithContent(this.container, tab);
 
     // Reset pagination for new tab
     this.currentOffset = 0;
