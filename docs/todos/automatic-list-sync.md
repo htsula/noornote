@@ -34,9 +34,13 @@ Relays = Remote Sync Target
 3. Publish to Relays (debounced, ~2-3 Sekunden)
 
 **Konflikt-Auflösung:**
-- Union/Merge-Strategie (beide Seiten behalten)
-- Niemals automatisch löschen
-- Prinzip: "Mehr ist besser als weniger"
+- Bei Sync from Relays: Existierendes `SyncConfirmationModal` nutzen
+- Wenn `removed.length > 0` (Browser hat Items die Relay nicht hat):
+  - Modal zeigt Diff und fragt User
+  - User entscheidet: "Keep and only add" (Merge) ODER "Delete and add" (Overwrite)
+- Wenn `removed.length === 0` (nur neue Items von Relay):
+  - Automatisch mergen ohne Nachfrage
+- **Prinzip:** Nie automatisch löschen, immer User fragen
 
 ### UI in Listen
 
@@ -71,46 +75,114 @@ Synchronisation Mode
 
 ## Architektur
 
+### Bestehende Komponenten (wiederverwenden)
+
+| Komponente | Pfad | Funktion |
+|------------|------|----------|
+| `ListSyncManager<T>` | `src/services/sync/ListSyncManager.ts` | 4-Button-Operationen |
+| `RestoreListsService` | `src/services/RestoreListsService.ts` | Cascading Restore |
+| `SyncConfirmationModal` | `src/components/modals/SyncConfirmationModal.ts` | Konflikt-Dialog |
+| `BaseListSecondaryManager` | `src/components/layout/managers/BaseListSecondaryManager.ts` | Buttons + Binding |
+
+### Neue Komponenten
+
 ```
 ┌─────────────────────────────────────────────────────┐
 │                  AutoSyncService                     │
 ├─────────────────────────────────────────────────────┤
 │  - isEasyMode(): boolean                            │
 │  - setEasyMode(enabled: boolean)                    │
-│  - syncOnStartup()                                  │
-│  - syncOnChange(listType, items)                    │
+│  - syncOnStartup(listType)                          │
+│  - syncOnChange(listType)                           │
+│  - debouncedRelaySync (2-3 sec)                     │
 ├─────────────────────────────────────────────────────┤
-│  Uses: RestoreListsService (read/restore)           │
-│        ListSyncManager (write to file/relays)       │
+│  Uses: ListSyncManager (via Adapters)               │
+│        ToastService (Status-Meldungen)              │
+│        SyncConfirmationModal (Konflikte)            │
+└─────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────┐
+│               ListSettingsSection                    │
+├─────────────────────────────────────────────────────┤
+│  extends SettingsSection                            │
+│  - Mode-Switch (Manual/Easy)                        │
+│  - Persists to localStorage                         │
 └─────────────────────────────────────────────────────┘
 ```
 
-**Bestehendes nutzen:**
-- `RestoreListsService` → Cascading Restore (Browser → File → Relays) ✓
-- `ListSyncManager` → Sync-Operationen (syncToRelays, saveToFile) ✓
+### Button-Rendering (Code-Extraktion)
 
-**Neu zu implementieren:**
-- `AutoSyncService` → Koordiniert Easy Mode Logik
-- `ListSettingsSection` → Settings UI Komponente
-- Event-Listener in Orchestratoren → Bei Änderung AutoSyncService triggern
+`renderControlButtons()` existiert in 2 Stellen:
+1. `BaseListSecondaryManager.ts:289-308`
+2. `BookmarkSecondaryManager.ts:276-295`
+
+**Lösung:** Gemeinsame Helper-Funktion extrahieren:
+
+```typescript
+// src/helpers/ListSyncButtonsHelper.ts
+export function renderListSyncButtons(mode: 'manual' | 'easy'): string {
+  if (mode === 'easy') {
+    return `
+      <div class="list-sync-controls list-sync-controls--easy">
+        <button class="btn btn--mini btn--passive save-to-file-btn">
+          Save to File
+        </button>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="list-sync-controls">
+      <button class="btn btn--mini btn--passive sync-from-relays-btn">...</button>
+      <button class="btn btn--mini btn--passive sync-to-relays-btn">...</button>
+      <button class="btn btn--mini btn--passive save-to-file-btn">...</button>
+      <button class="btn btn--mini btn--passive restore-from-file-btn">...</button>
+    </div>
+    <p class="list-sync-info">...</p>
+  `;
+}
+```
+
+### Event-Flow in Easy Mode
+
+```
+User macht Änderung (z.B. Follow)
+        │
+        ▼
+Orchestrator.addItem() → Browser-Storage update
+        │
+        ▼
+EventBus.emit('follow:updated' / 'bookmark:updated' / 'mute:updated')
+        │
+        ▼
+AutoSyncService.syncOnChange(listType)
+        │
+        ├──► 1. saveToFile() (sofort, synchron)
+        │
+        └──► 2. syncToRelays() (debounced, 2-3 sec)
+```
 
 ## Risiken & Mitigations
 
 | Risiko | Mitigation |
 |--------|------------|
-| Datenverlust | Lokale Datei wird IMMER zuerst geschrieben |
+| Datenverlust | Lokale Datei wird IMMER zuerst geschrieben, vor Relay-Sync |
 | Race Conditions | Debounced Relay-Sync, lokale Datei ist Fallback |
 | Relay nicht erreichbar | Lokale Datei existiert, Relay-Sync wird bei nächster Änderung erneut versucht |
 | Performance | Debouncing für Relay-Publishes |
+| Konflikt bei Startup | SyncConfirmationModal fragt User wenn nötig |
 
 ## Implementierungs-Schritte
 
 1. [x] Strategie dokumentieren
-2. [ ] `ListSettingsSection` erstellen (Settings UI)
-3. [ ] `AutoSyncService` implementieren
-4. [ ] Orchestratoren anpassen (Event bei Änderung → AutoSyncService)
-5. [ ] Buttons in Listen conditional rendern (Manual vs Easy Mode)
-6. [ ] Testen mit Edge Cases
+2. [x] Bestehenden Code analysieren
+3. [ ] `ListSyncButtonsHelper` extrahieren (aus BaseListSecondaryManager)
+4. [ ] `AutoSyncService` erstellen
+5. [ ] `ListSettingsSection` erstellen (Settings UI)
+6. [ ] `SettingsView` erweitern (ListSettingsSection einbinden)
+7. [ ] Managers anpassen (Helper nutzen, Mode-abhängig rendern)
+8. [ ] EventBus-Listener in AutoSyncService für list-Events
+9. [ ] Testen mit Edge Cases
 
 ## Priorität
 
