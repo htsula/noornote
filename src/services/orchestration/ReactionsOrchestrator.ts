@@ -597,8 +597,13 @@ export class ReactionsOrchestrator extends Orchestrator {
       return true;
     }
 
-    // Valid naddr (long-form article identifier)
+    // Valid naddr (long-form article identifier, bech32 encoded)
     if (noteId.startsWith('naddr1')) {
+      return true;
+    }
+
+    // Valid addressable identifier (kind:pubkey:d-tag format for long-form articles)
+    if (this.isLongFormArticle(noteId)) {
       return true;
     }
 
