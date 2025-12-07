@@ -23,6 +23,7 @@ import { ListSyncManager } from '../../../services/sync/ListSyncManager';
 import { BookmarkStorageAdapter } from '../../../services/sync/adapters/BookmarkStorageAdapter';
 import { RestoreListsService } from '../../../services/RestoreListsService';
 import { SyncConfirmationModal } from '../../modals/SyncConfirmationModal';
+import { renderListSyncButtons } from '../../../helpers/ListSyncButtonsHelper';
 import { NewFolderModal } from '../../modals/NewFolderModal';
 import { NewBookmarkModal } from '../../modals/NewBookmarkModal';
 import { EditBookmarkModal } from '../../modals/EditBookmarkModal';
@@ -96,6 +97,11 @@ export class BookmarkSecondaryManager {
     this.eventBus.on('user:login', () => {
       this.currentFolderId = '';
       this.bookmarksCache.clear();
+      this.refreshIfActive();
+    });
+
+    // Re-render when sync mode changes (Manual <-> Easy)
+    this.eventBus.on('list-sync-mode:changed', () => {
       this.refreshIfActive();
     });
   }
@@ -271,28 +277,10 @@ export class BookmarkSecondaryManager {
   }
 
   /**
-   * Render sync controls
+   * Render sync controls based on sync mode (Manual vs Easy)
    */
   private renderSyncControls(): string {
-    return `
-      <div class="list-sync-controls">
-        <button class="btn btn--mini btn--passive sync-from-relays-btn">
-          Sync from Relays
-        </button>
-        <button class="btn btn--mini btn--passive sync-to-relays-btn">
-          Sync to Relays
-        </button>
-        <button class="btn btn--mini btn--passive save-to-file-btn">
-          Save to File
-        </button>
-        <button class="btn btn--mini btn--passive restore-from-file-btn">
-          Restore from File
-        </button>
-      </div>
-      <p class="list-sync-info">
-        This list is stored in 3 places: on your hard drive - in the NoorNote app - on the relays.
-      </p>
-    `;
+    return renderListSyncButtons();
   }
 
   /**

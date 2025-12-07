@@ -5,6 +5,7 @@
  */
 
 import { ModalService } from '../../services/ModalService';
+import { setupUserMentionHandlers } from '../../helpers/UserMentionHelper';
 
 export interface SyncConfirmationOptions<T> {
   /** Name of the list type (e.g., "Bookmarks", "Follows", "Muted Users") */
@@ -13,19 +14,26 @@ export interface SyncConfirmationOptions<T> {
   added: T[];
   /** Items that will be removed (exist locally but not on relay) */
   removed: T[];
-  /** Function to get displayable name for an item */
+  /** Function to get displayable name for an item (text only) */
   getDisplayName: (item: T) => string | Promise<string>;
+  /** Optional: Function to render item as HTML (for mentions with avatar) */
+  renderItemHtml?: (item: T) => string | Promise<string>;
   /** Callback when user chooses "Keep local items" (merge strategy) */
   onKeep: () => void;
   /** Callback when user chooses "Delete here too" (overwrite strategy) */
   onDelete: () => void;
 }
 
+interface ResolvedItem {
+  name: string;
+  html?: string;
+}
+
 export class SyncConfirmationModal<T> {
   private modalService: ModalService;
   private options: SyncConfirmationOptions<T>;
-  private resolvedAddedNames: string[] = [];
-  private resolvedRemovedNames: string[] = [];
+  private resolvedAddedItems: ResolvedItem[] = [];
+  private resolvedRemovedItems: ResolvedItem[] = [];
 
   constructor(options: SyncConfirmationOptions<T>) {
     this.modalService = ModalService.getInstance();
@@ -54,6 +62,13 @@ export class SyncConfirmationModal<T> {
     // Setup event handlers
     setTimeout(() => {
       this.setupEventHandlers();
+      // Setup mention handlers if HTML rendering is used
+      if (this.options.renderItemHtml) {
+        const modalContent = document.querySelector('.sync-confirmation-modal');
+        if (modalContent) {
+          setupUserMentionHandlers(modalContent as HTMLElement);
+        }
+      }
     }, 0);
   }
 
@@ -61,16 +76,24 @@ export class SyncConfirmationModal<T> {
    * Resolve display names for all items
    */
   private async resolveDisplayNames(): Promise<void> {
-    const { added, removed, getDisplayName } = this.options;
+    const { added, removed, getDisplayName, renderItemHtml } = this.options;
 
     // Resolve added items
-    this.resolvedAddedNames = await Promise.all(
-      added.map(item => Promise.resolve(getDisplayName(item)))
+    this.resolvedAddedItems = await Promise.all(
+      added.map(async item => {
+        const name = await Promise.resolve(getDisplayName(item));
+        const html = renderItemHtml ? await Promise.resolve(renderItemHtml(item)) : undefined;
+        return { name, html };
+      })
     );
 
     // Resolve removed items
-    this.resolvedRemovedNames = await Promise.all(
-      removed.map(item => Promise.resolve(getDisplayName(item)))
+    this.resolvedRemovedItems = await Promise.all(
+      removed.map(async item => {
+        const name = await Promise.resolve(getDisplayName(item));
+        const html = renderItemHtml ? await Promise.resolve(renderItemHtml(item)) : undefined;
+        return { name, html };
+      })
     );
   }
 
@@ -97,7 +120,7 @@ export class SyncConfirmationModal<T> {
               ❌ Removed on relay (${removed.length} item${removed.length > 1 ? 's' : ''})
             </h3>
             <div class="sync-confirmation-modal__list">
-              ${this.renderRemovedItems()}
+              ${this.renderItems(this.resolvedRemovedItems)}
             </div>
           </div>
         ` : ''}
@@ -108,7 +131,7 @@ export class SyncConfirmationModal<T> {
               ✅ New on relay (${added.length} item${added.length > 1 ? 's' : ''})
             </h3>
             <div class="sync-confirmation-modal__list">
-              ${this.renderAddedItems()}
+              ${this.renderItems(this.resolvedAddedItems)}
             </div>
           </div>
         ` : ''}
@@ -134,34 +157,19 @@ export class SyncConfirmationModal<T> {
   }
 
   /**
-   * Render removed items (limited to 10, show "+X more" if needed)
+   * Render items (limited to 10, show "+X more" if needed)
    */
-  private renderRemovedItems(): string {
+  private renderItems(items: ResolvedItem[]): string {
     const maxShow = 10;
-    const namesToShow = this.resolvedRemovedNames.slice(0, maxShow);
-    const remaining = this.resolvedRemovedNames.length - maxShow;
+    const itemsToShow = items.slice(0, maxShow);
+    const remaining = items.length - maxShow;
 
-    let html = namesToShow
-      .map(name => `<div class="sync-confirmation-modal__item">${this.escapeHtml(name)}</div>`)
-      .join('');
-
-    if (remaining > 0) {
-      html += `<div class="sync-confirmation-modal__item sync-confirmation-modal__item--more">+ ${remaining} more...</div>`;
-    }
-
-    return html;
-  }
-
-  /**
-   * Render added items (limited to 10, show "+X more" if needed)
-   */
-  private renderAddedItems(): string {
-    const maxShow = 10;
-    const namesToShow = this.resolvedAddedNames.slice(0, maxShow);
-    const remaining = this.resolvedAddedNames.length - maxShow;
-
-    let html = namesToShow
-      .map(name => `<div class="sync-confirmation-modal__item">${this.escapeHtml(name)}</div>`)
+    let html = itemsToShow
+      .map(item => {
+        // Use HTML if available, otherwise escape text
+        const content = item.html || this.escapeHtml(item.name);
+        return `<div class="sync-confirmation-modal__item">${content}</div>`;
+      })
       .join('');
 
     if (remaining > 0) {
