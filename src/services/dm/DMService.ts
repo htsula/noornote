@@ -655,12 +655,23 @@ export class DMService {
 
   /**
    * Get current user's inbox relays (from config or fallback)
+   * Combines: configured inbox relays + aggregator relays + nostr1.com relays
    */
   private async getMyInboxRelays(): Promise<string[]> {
-    const currentUser = this.authService.getCurrentUser();
-    if (!currentUser) return this.FALLBACK_INBOX_RELAYS;
+    const relays = new Set<string>();
 
-    return this.getUserInboxRelays(currentUser.pubkey);
+    // Add configured inbox relays if available
+    const configRelays = this.relayConfig.getInboxRelays();
+    configRelays.forEach(r => relays.add(r));
+
+    // Add aggregator relays (popular public relays)
+    const aggregatorRelays = this.relayConfig.getAggregatorRelays();
+    aggregatorRelays.forEach(r => relays.add(r));
+
+    // Add nostr1.com relays as fallback
+    this.FALLBACK_INBOX_RELAYS.forEach(r => relays.add(r));
+
+    return Array.from(relays);
   }
 
   /**
@@ -673,20 +684,13 @@ export class DMService {
 
   /**
    * Get a user's inbox relays (kind:10050)
+   * Used when SENDING DMs to determine where to publish
    */
   public async getUserInboxRelays(pubkey: string): Promise<string[]> {
     try {
-      // First check RelayConfig for inbox relays (user-configured)
-      const configRelays = this.relayConfig.getInboxRelays();
-      if (configRelays.length > 0 && pubkey === this.userPubkey) {
-        this.systemLogger.info('DMService', `Using ${configRelays.length} configured inbox relays`);
-        return configRelays;
-      }
-
-      // For own user without config: use fallback relays (don't fetch kind:10050)
+      // For own user: use getMyInboxRelays (which combines all sources)
       if (pubkey === this.userPubkey) {
-        this.systemLogger.info('DMService', `Using ${this.FALLBACK_INBOX_RELAYS.length} fallback inbox relays`);
-        return this.FALLBACK_INBOX_RELAYS;
+        return this.getMyInboxRelays();
       }
 
       // For other users: fetch their kind:10050 from relays
@@ -706,15 +710,17 @@ export class DMService {
 
         if (dmRelays.length > 0) {
           this.systemLogger.info('DMService', `Found kind:10050 for ${pubkey.slice(0, 8)} with ${dmRelays.length} DM relays`);
-          return dmRelays;
+          // Also add aggregator relays to ensure delivery
+          const aggregators = this.relayConfig.getAggregatorRelays();
+          return [...new Set([...dmRelays, ...aggregators])];
         }
       }
 
-      // Fallback for other users: use our fallback relays
-      return this.FALLBACK_INBOX_RELAYS;
+      // Fallback for other users: use aggregator relays
+      return this.relayConfig.getAggregatorRelays();
     } catch (error) {
       this.systemLogger.warn('DMService', `Failed to fetch inbox relays for ${pubkey.slice(0, 8)}`);
-      return this.FALLBACK_INBOX_RELAYS;
+      return this.relayConfig.getAggregatorRelays();
     }
   }
 
