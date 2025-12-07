@@ -8,98 +8,110 @@ Derzeit verwaltet der User die 3 Speicherstellen (Festplatte, localStorage, Rela
 - "Save to File"
 - "Restore from File"
 
-**Ziel:** Ein Switch in den List-Settings, der diese Synchronisation automatisiert für User, die das nicht selbst managen wollen.
+**Ziel:** Ein Switch in den Settings ("List Settings"), der zwischen Manual Mode und Easy Mode umschaltet.
 
-## Herausforderung
+## Entscheidungen ✓
 
-Die automatische Synchronisation muss **bullet-proof** sein:
-- Keine Liste darf verloren gehen
-- Kein versehentliches Überschreiben
-- Konflikte müssen sicher aufgelöst werden
-- Offline-Fähigkeit muss erhalten bleiben
+### Speicher-Hierarchie
 
-## Offene Fragen
+```
+Lokale Datei = "Last Resort" Backup (höchste Priorität bei Restore)
+Browser/localStorage = Working State
+Relays = Remote Sync Target
+```
 
-1. **Sync-Richtung:** Welche Quelle ist "Master"?
-   - Option A: Relays sind Master (wie bei anderen Nostr-Clients)
-   - Option B: Lokale Datei ist Master (Offline-First)
-   - Option C: Merge-Strategie mit Konflikt-UI
+### Sync-Strategie: Easy Mode
 
-2. **Sync-Timing:** Wann synchronisieren?
-   - Bei App-Start?
-   - Bei Änderungen (sofort oder debounced)?
-   - Periodisch im Hintergrund?
-   - Bei App-Schließen?
+**Bei App-Start (Browser leer):**
+1. Restore von lokaler Datei versuchen
+2. Falls keine Datei → Sync from Relays
+   - Toast: "App cache empty. No local backup found. Syncing from Relays"
+3. Nach Relay-Sync → Sofort lokale Datei schreiben (erstes Backup erstellen)
 
-3. **Konflikt-Handling:** Was passiert bei Unterschieden?
-   - Lokal hat Item X, Relay nicht → Publishen oder löschen?
-   - Relay hat Item Y, lokal nicht → Übernehmen oder ignorieren?
-   - Timestamps vergleichen? Event-IDs?
+**Bei User-Änderung (Follow/Unfollow, Bookmark, Mute etc.):**
+1. Browser/localStorage update (sofort)
+2. Lokale Datei speichern (sofort) → Backup IMMER zuerst!
+3. Publish to Relays (debounced, ~2-3 Sekunden)
 
-4. **Rollback:** Was wenn etwas schief geht?
-   - Backup vor Sync?
-   - Undo-Funktion?
+**Konflikt-Auflösung:**
+- Union/Merge-Strategie (beide Seiten behalten)
+- Niemals automatisch löschen
+- Prinzip: "Mehr ist besser als weniger"
 
-## Erster Schritt: RestoreListsService ✓
+### UI in Listen
 
-Als Grundlage existiert bereits `src/services/RestoreListsService.ts`:
-- Cascading Restore: Browser → Lokale Datei → Relays
-- Generische Methode für alle Listen (Follows, Bookmarks, Mutes)
-- Wird aufgerufen wenn Browser-Storage leer ist
+**Manual Mode:** 4 Buttons sichtbar
+- Sync from Relays
+- Sync to Relays
+- Save to File
+- Restore from File
 
-Dies ist der **Read-Pfad** der automatischen Sync. Fehlt noch:
-- **Write-Pfad:** Automatisches Speichern bei Änderungen
-- **Conflict Resolution:** Intelligentes Mergen
-- **Settings UI:** Switch zum Aktivieren/Deaktivieren
+**Easy Mode:** 1 Button sichtbar
+- Save to File (manuelles Backup, falls User explizit sichern will)
 
-## Mögliche Architektur
+## Settings UI
+
+Neue Sektion "List Settings" in SettingsView:
+
+```
+List Settings
+─────────────────────────────────────────
+
+Synchronisation Mode
+
+○ Manual Mode (default)
+  Manage sync manually with action buttons in each list
+
+● Easy Mode
+  NoorNote syncs automatically:
+  - Changes saved to local backup immediately
+  - Then published to relays
+  - On startup: restore from backup or relays
+```
+
+## Architektur
 
 ```
 ┌─────────────────────────────────────────────────────┐
 │                  AutoSyncService                     │
 ├─────────────────────────────────────────────────────┤
-│  - enabled: boolean (aus Settings)                  │
+│  - isEasyMode(): boolean                            │
+│  - setEasyMode(enabled: boolean)                    │
 │  - syncOnStartup()                                  │
-│  - syncOnChange(listType, action)                   │
-│  - syncOnClose()                                    │
-│  - resolveConflict(local, remote) → merged          │
+│  - syncOnChange(listType, items)                    │
 ├─────────────────────────────────────────────────────┤
-│  Uses: RestoreListsService (read)                   │
-│        ListSyncManager (write)                      │
-│        ConflictResolver (merge)                     │
+│  Uses: RestoreListsService (read/restore)           │
+│        ListSyncManager (write to file/relays)       │
 └─────────────────────────────────────────────────────┘
 ```
 
-## Settings UI
+**Bestehendes nutzen:**
+- `RestoreListsService` → Cascading Restore (Browser → File → Relays) ✓
+- `ListSyncManager` → Sync-Operationen (syncToRelays, saveToFile) ✓
 
-```
-List Synchronisation
-────────────────────
-○ Manual (default)
-  Sync-Buttons in jeder Liste verwenden
+**Neu zu implementieren:**
+- `AutoSyncService` → Koordiniert Easy Mode Logik
+- `ListSettingsSection` → Settings UI Komponente
+- Event-Listener in Orchestratoren → Bei Änderung AutoSyncService triggern
 
-● Automatic
-  Listen werden automatisch synchronisiert:
-  - Bei App-Start: Von Relays laden
-  - Bei Änderungen: Zu Relays publishen
-  - Lokale Backup-Datei wird automatisch aktualisiert
-```
+## Risiken & Mitigations
 
-## Risiken
+| Risiko | Mitigation |
+|--------|------------|
+| Datenverlust | Lokale Datei wird IMMER zuerst geschrieben |
+| Race Conditions | Debounced Relay-Sync, lokale Datei ist Fallback |
+| Relay nicht erreichbar | Lokale Datei existiert, Relay-Sync wird bei nächster Änderung erneut versucht |
+| Performance | Debouncing für Relay-Publishes |
 
-- **Datenverlust:** Wenn Auto-Sync falsch implementiert → User verliert Follows/Bookmarks
-- **Race Conditions:** Gleichzeitige Änderungen auf verschiedenen Geräten
-- **Relay-Probleme:** Was wenn Relay nicht erreichbar?
-- **Performance:** Zu häufiges Syncing belastet Relays und Netzwerk
+## Implementierungs-Schritte
+
+1. [x] Strategie dokumentieren
+2. [ ] `ListSettingsSection` erstellen (Settings UI)
+3. [ ] `AutoSyncService` implementieren
+4. [ ] Orchestratoren anpassen (Event bei Änderung → AutoSyncService)
+5. [ ] Buttons in Listen conditional rendern (Manual vs Easy Mode)
+6. [ ] Testen mit Edge Cases
 
 ## Priorität
 
-**Niedrig** - Manuelle Sync funktioniert. Auto-Sync ist Komfort-Feature.
-
-## Nächste Schritte
-
-1. [ ] Entscheidung: Welche Sync-Strategie? (Master, Timing, Konflikte)
-2. [ ] ConflictResolver Konzept ausarbeiten
-3. [ ] Settings UI designen
-4. [ ] AutoSyncService implementieren
-5. [ ] Ausgiebig testen mit Edge Cases
+**Mittel** - Verbessert UX signifikant für User, die nicht manuell synchen wollen.
