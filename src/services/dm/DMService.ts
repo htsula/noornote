@@ -65,6 +65,12 @@ export class DMService {
     this.eventBus.on('mute:updated', () => {
       this.refreshMutedPubkeys();
     });
+
+    // Listen for logout to clear DM data (multi-user support)
+    this.eventBus.on('user:logout', () => {
+      this.stop();
+      this.clear();
+    });
   }
 
   public static getInstance(): DMService {
@@ -85,15 +91,18 @@ export class DMService {
         return;
       }
 
-      // Idempotency check
+      // Idempotency check - same user already running
       if (this.userPubkey === currentUser.pubkey && this.subscriptionId) {
         this.systemLogger.info('DMService', 'Already started for this user');
         return;
       }
 
-      // User changed - stop old subscription
-      if (this.userPubkey && this.userPubkey !== currentUser.pubkey) {
+      // User changed or fresh start - clear old data first
+      // This handles both: explicit user switch AND restart after logout
+      if (this.userPubkey !== currentUser.pubkey) {
         this.stop();
+        await this.clear();
+        this.systemLogger.info('DMService', 'Cleared DM data for fresh start');
       }
 
       this.userPubkey = currentUser.pubkey;
@@ -820,6 +829,8 @@ export class DMService {
     this.followCheckService.clear();
     this.mutedPubkeys.clear();
     this.mutedPubkeysLoaded = false;
+    // Notify UI to update badge (will hide since no user/data)
+    this.eventBus.emit('dm:badge-update');
   }
 
   /**
