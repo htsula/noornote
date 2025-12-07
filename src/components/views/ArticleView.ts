@@ -115,10 +115,7 @@ export class ArticleView {
         articleEventId, // LONG-FORM ARTICLE: Pass event ID for proper zap tagging
         onAnalytics: () => {
           const analyticsModal = AnalyticsModal.getInstance();
-          analyticsModal.show({
-            noteId,
-            authorPubkey: event.pubkey
-          });
+          analyticsModal.show(noteId, event);
         }
       });
       articleBody.insertAdjacentElement('afterend', isl.getElement());
