@@ -105,10 +105,11 @@ class MutualChangeServiceImpl {
       await this.detector.restoreNotificationsFromChanges();
 
       // Start scheduler
-      await this.scheduler.start();
+      // DISABLED: Too many false positives - see docs/todos/bugs.md
+      // await this.scheduler.start();
 
       this.isInitialized = true;
-      this.systemLogger.info('MutualChangeService', 'Scheduler started successfully');
+      this.systemLogger.info('MutualChangeService', 'Scheduler DISABLED (false positives bug)');
     } catch (error) {
       this.systemLogger.error('MutualChangeService', `Failed to start scheduler: ${error}`);
     }
