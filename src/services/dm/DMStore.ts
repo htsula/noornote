@@ -43,12 +43,14 @@ export interface DMConversation {
   lastMessagePreview: string;
   /** Unread message count */
   unreadCount: number;
+  /** Timestamp when conversation was last marked as read (for persistence) */
+  lastReadAt: number;
   /** Conversation subject (latest) */
   subject?: string;
 }
 
 const DB_NAME = 'noornote_dm';
-const DB_VERSION = 2; // Bumped for metadata store
+const DB_VERSION = 3; // Bumped for lastReadAt field
 const MESSAGES_STORE = 'messages';
 const CONVERSATIONS_STORE = 'conversations';
 const METADATA_STORE = 'metadata';
@@ -160,6 +162,7 @@ export class DMStore {
 
   /**
    * Save a message (upsert)
+   * Only increments unread count for messages newer than lastReadAt
    */
   public async saveMessage(message: DMMessage): Promise<void> {
     await this.init();
@@ -189,11 +192,20 @@ export class DMStore {
           const existing = getConvRequest.result as DMConversation | undefined;
           const isNewer = !existing || message.createdAt > existing.lastMessageAt;
 
+          // Only count as unread if:
+          // 1. Not my own message
+          // 2. Message is newer than lastReadAt (or no lastReadAt exists = 0)
+          const lastReadAt = existing?.lastReadAt || 0;
+          const shouldIncrementUnread = !message.isMine && message.createdAt > lastReadAt;
+
           const conversation: DMConversation = {
             pubkey: message.conversationWith,
             lastMessageAt: isNewer ? message.createdAt : existing!.lastMessageAt,
             lastMessagePreview: isNewer ? message.content.slice(0, 100) : existing!.lastMessagePreview,
-            unreadCount: message.isMine ? (existing?.unreadCount || 0) : (existing?.unreadCount || 0) + 1,
+            unreadCount: shouldIncrementUnread
+              ? (existing?.unreadCount || 0) + 1
+              : (existing?.unreadCount || 0),
+            lastReadAt: lastReadAt,
             subject: message.subject || existing?.subject
           };
 
@@ -303,7 +315,7 @@ export class DMStore {
   }
 
   /**
-   * Mark conversation as read (reset unread count)
+   * Mark conversation as read (reset unread count and set lastReadAt)
    */
   public async markAsRead(partnerPubkey: string): Promise<void> {
     await this.init();
@@ -317,6 +329,7 @@ export class DMStore {
         const conversation = request.result as DMConversation | undefined;
         if (conversation) {
           conversation.unreadCount = 0;
+          conversation.lastReadAt = Math.floor(Date.now() / 1000);
           store.put(conversation);
         }
         resolve();
@@ -332,6 +345,8 @@ export class DMStore {
   public async markAllAsRead(): Promise<void> {
     await this.init();
 
+    const now = Math.floor(Date.now() / 1000);
+
     return new Promise((resolve, reject) => {
       const tx = this.db!.transaction(CONVERSATIONS_STORE, 'readwrite');
       const store = tx.objectStore(CONVERSATIONS_STORE);
@@ -343,6 +358,7 @@ export class DMStore {
           const conversation = cursor.value as DMConversation;
           if (conversation.unreadCount > 0) {
             conversation.unreadCount = 0;
+            conversation.lastReadAt = now;
             cursor.update(conversation);
           }
           cursor.continue();
@@ -371,6 +387,8 @@ export class DMStore {
           const conversation = cursor.value as DMConversation;
           if (conversation.unreadCount === 0) {
             conversation.unreadCount = 1;
+            // Reset lastReadAt to 0 so future historical messages count as unread
+            conversation.lastReadAt = 0;
             cursor.update(conversation);
           }
           cursor.continue();

@@ -3,10 +3,11 @@
 ## Open
 
 ### Mutual Background Check - False Positives
-- **Screenshot:** `screenshots/bugs/mutual-background-check.png`
+- **Screenshot:** `screenshots/bugs/mutual-background-check.png`, `screenshots/bugs/mutual-follow-bug-false-positives.png`
 - **Referenz:** `docs/features/mutual-check-feature-04-automation.md`
 - **Problem:** Background Check (App-Start + alle 4h) meldet wiederholt Follow/Unfollow-Wechsel für dieselben 3 User (z.B. "Mike stopped following you back" mehrfach), obwohl diese User durchgehend folgen
 - **Symptom:** Falsche Notifications in der NV, gleiche User tauchen immer wieder auf
+- **Status:** Scheduler DEAKTIVIERT in `MutualChangeService.ts` (zu viele False Positives). Manuelle Checks über Follows-Tab funktionieren weiterhin.
 
 ### Mutual Follow Badge Widerspruch
 - **Screenshot:** `screenshots/bugs/mutual-follow-bug.png`
