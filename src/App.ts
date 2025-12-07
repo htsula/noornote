@@ -20,6 +20,7 @@ import { ModalService } from './services/ModalService';
 import { PlatformService } from './services/PlatformService';
 import { ConnectivityService } from './services/ConnectivityService';
 import { OfflineOverlay } from './components/system/OfflineOverlay';
+import { AutoSyncService } from './services/sync/AutoSyncService';
 import type { View } from './components/views/View';
 
 export class App {
@@ -62,6 +63,9 @@ export class App {
 
     // Initialize OfflineOverlay early so it can listen for runtime offline events
     OfflineOverlay.getInstance();
+
+    // Initialize AutoSyncService to listen for list update events
+    AutoSyncService.getInstance();
 
     // Check internet connectivity before proceeding
     const connectivityService = ConnectivityService.getInstance();

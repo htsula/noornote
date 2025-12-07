@@ -17,6 +17,7 @@ import { ListSyncManager } from '../../../services/sync/ListSyncManager';
 import { SyncConfirmationModal } from '../../modals/SyncConfirmationModal';
 import { InfiniteScroll } from '../../ui/InfiniteScroll';
 import { switchTabWithContent } from '../../../helpers/TabsHelper';
+import { renderListSyncButtons, isEasyMode } from '../../../helpers/ListSyncButtonsHelper';
 
 export abstract class BaseListSecondaryManager<TItem, TWithProfile> {
   protected eventBus: EventBus;
@@ -115,6 +116,11 @@ export abstract class BaseListSecondaryManager<TItem, TWithProfile> {
       this.currentOffset = 0;
       this.hasMore = true;
       this.isLoading = false;
+      this.refreshListIfActive();
+    });
+
+    // Re-render when sync mode changes (Manual <-> Easy)
+    this.eventBus.on('list-sync-mode:changed', () => {
       this.refreshListIfActive();
     });
   }
@@ -284,28 +290,10 @@ export abstract class BaseListSecondaryManager<TItem, TWithProfile> {
   }
 
   /**
-   * Render control buttons (4 buttons horizontal)
+   * Render control buttons based on sync mode (Manual vs Easy)
    */
   protected renderControlButtons(): string {
-    return `
-      <div class="list-sync-controls">
-        <button class="btn btn--mini btn--passive sync-from-relays-btn">
-          Sync from Relays
-        </button>
-        <button class="btn btn--mini btn--passive sync-to-relays-btn">
-          Sync to Relays
-        </button>
-        <button class="btn btn--mini btn--passive save-to-file-btn">
-          Save to File
-        </button>
-        <button class="btn btn--mini btn--passive restore-from-file-btn">
-          Restore from File
-        </button>
-      </div>
-      <p class="list-sync-info">
-        This list is stored in 3 places: on your hard drive - in the NoorNote app - on the relays. You can use the buttons up there to control how the list stays synced across those three.
-      </p>
-    `;
+    return renderListSyncButtons();
   }
 
   /**

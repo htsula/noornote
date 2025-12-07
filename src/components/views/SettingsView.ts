@@ -17,6 +17,7 @@ import { KeySignerSection } from '../settings/KeySignerSection';
 import { MediaServerSection } from '../settings/MediaServerSection';
 import { NWCSettingsSection } from '../settings/NWCSettingsSection';
 import { PrivacySettingsSection } from '../settings/PrivacySettingsSection';
+import { ListSettingsSection } from '../settings/ListSettingsSection';
 import { CacheSettingsSection } from '../settings/CacheSettingsSection';
 
 export class SettingsView extends View {
@@ -30,6 +31,7 @@ export class SettingsView extends View {
   private mediaServerSection: MediaServerSection;
   private nwcSettingsSection: NWCSettingsSection;
   private privacySettingsSection: PrivacySettingsSection;
+  private listSettingsSection: ListSettingsSection;
   private cacheSettingsSection: CacheSettingsSection;
 
   constructor() {
@@ -50,6 +52,7 @@ export class SettingsView extends View {
     this.mediaServerSection = new MediaServerSection();
     this.nwcSettingsSection = new NWCSettingsSection();
     this.privacySettingsSection = new PrivacySettingsSection();
+    this.listSettingsSection = new ListSettingsSection();
     this.cacheSettingsSection = new CacheSettingsSection();
 
     this.render();
@@ -94,6 +97,12 @@ export class SettingsView extends View {
           false
         )}
 
+        ${this.listSettingsSection.renderAccordionSection(
+          'List Settings',
+          'Configure how NoorNote syncs your lists (Follows, Bookmarks, Mutes) across local backup and relays.',
+          false
+        )}
+
         ${this.cacheSettingsSection.renderAccordionSection(
           'Cache Settings',
           'Configure NDK cache sizes and clear cache data.',
@@ -113,6 +122,7 @@ export class SettingsView extends View {
     this.mediaServerSection.mount(this.container);
     this.nwcSettingsSection.mount(this.container);
     this.privacySettingsSection.mount(this.container);
+    this.listSettingsSection.mount(this.container);
     this.cacheSettingsSection.mount(this.container);
 
     // Initialize and mount sync status badge
@@ -147,7 +157,6 @@ export class SettingsView extends View {
    * Cleanup on destroy
    */
   public destroy(): void {
-    this.appearanceSection.unmount();
     this.relaySettingsSection.unmount();
     if (this.keySignerSection) {
       this.keySignerSection.unmount();
@@ -155,6 +164,7 @@ export class SettingsView extends View {
     this.mediaServerSection.unmount();
     this.nwcSettingsSection.unmount();
     this.privacySettingsSection.unmount();
+    this.listSettingsSection.unmount();
     this.cacheSettingsSection.unmount();
 
     // Cleanup sync status badge
