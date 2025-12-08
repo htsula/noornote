@@ -101,6 +101,9 @@ export class DMService {
       // Idempotency check - same user already running
       if (this.userPubkey === currentUser.pubkey && this.subscriptionId) {
         this.systemLogger.info('DMService', 'Already started for this user');
+        // Still emit events so late subscribers (like MessagesView) get the data
+        this.eventBus.emit('dm:fetch-complete');
+        this.eventBus.emit('dm:badge-update');
         return;
       }
 
