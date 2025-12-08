@@ -122,10 +122,10 @@ Vor Release prüfen ob Version angepasst werden soll:
 
 - [x] Fonts löschen (42MB)
 - [x] .DS_Store entfernen
-- [ ] Console.log prüfen
-- [ ] TODOs prüfen
-- [ ] Typecheck durchlaufen
-- [ ] Build durchlaufen
+- [x] Console.log prüfen (kritische → SystemLogger, debug entfernt)
+- [x] TODOs prüfen (dokumentiert in docs/todos/)
+- [x] Typecheck durchlaufen (~500 verbleibende Fehler dokumentiert in docs/todos/typescript-strict-mode.md)
+- [x] Build durchlaufen (✓ erfolgreich)
 - [x] Repository URLs korrigieren
-- [ ] Version prüfen
-- [ ] Enduser-taugliche README erstellen
+- [x] Version prüfen (0.7.0)
+- [x] Enduser-taugliche README erstellen
