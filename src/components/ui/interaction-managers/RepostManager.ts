@@ -60,31 +60,23 @@ export class RepostManager extends BaseInteractionManager<RepostManagerConfig> {
    * Handle repost action
    */
   public async handleRepost(): Promise<void> {
-    console.log('🎯 RepostManager handleRepost called');
-
     if (!this.requireAuth('repost this note')) {
-      console.log('❌ RepostManager: Auth check failed');
       return;
     }
 
-    console.log('✅ RepostManager: Auth check passed');
-
     // Don't allow reposting if already reposted
     if (this.hasInteracted) {
-      console.log('ℹ️ User has already reposted this note');
       ToastService.show('You already reposted this note', 'info');
       return;
     }
 
     // Call custom handler if provided
     if (this.config.onRepost) {
-      console.log('🔄 RepostManager: Using custom onRepost handler');
       this.config.onRepost();
       return;
     }
 
     // Publish repost
-    console.log('📤 RepostManager: Publishing repost...');
     await this.publishRepost();
   }
 
@@ -108,54 +100,40 @@ export class RepostManager extends BaseInteractionManager<RepostManagerConfig> {
    * Publish repost to note
    */
   private async publishRepost(): Promise<void> {
-    console.log('📤 RepostManager publishRepost called');
-
     try {
       const originalEvent = this.config.originalEvent;
 
       if (!originalEvent) {
-        console.error('❌ Original event not found');
         ToastService.show('Note not found', 'error');
         return;
       }
 
-      console.log('✅ Original event found:', originalEvent.id.slice(0, 8));
-
       // If reposting a repost (Kind 6), extract the original event
       // Per NIP-18: A repost MUST reference the original event, not another repost
       const unwrappedEvent = await getRepostsOriginalEvent(originalEvent);
-      console.log('✅ Unwrapped event (if repost):', unwrappedEvent.id.slice(0, 8));
 
       const writeRelays = await RelayConfig.getInstance().getWriteRelays();
 
-      console.log('📡 Write relays:', writeRelays);
-
       if (writeRelays.length === 0) {
-        console.error('❌ No write relays configured');
+        console.error('No write relays configured');
         return;
       }
-
-      console.log('🎯 Publishing repost for note:', this.config.noteId);
 
       const result = await this.repostService.publishRepost({
         originalEvent: unwrappedEvent,
         relays: writeRelays
       });
 
-      console.log('✅ Repost published, result:', result);
-
       if (result.success) {
         // Update stats (cache invalidation + optimistic UI update)
         this.updateStats('repost');
-        console.log('✅ Stats updated via StatsUpdateService');
 
         // Update reposted state and button appearance
         this.hasInteracted = true;
         this.updateButtonState(true);
-        console.log('✅ Repost button state updated to active');
       }
     } catch (error) {
-      console.error('❌ Failed to publish repost:', error);
+      console.error('Failed to publish repost:', error);
     }
   }
 
@@ -167,7 +145,6 @@ export class RepostManager extends BaseInteractionManager<RepostManagerConfig> {
       const originalEvent = this.config.originalEvent;
 
       if (!originalEvent) {
-        console.error('❌ Original event not found for quoted repost');
         ToastService.show('Note not found', 'error');
         return;
       }
@@ -201,7 +178,7 @@ export class RepostManager extends BaseInteractionManager<RepostManagerConfig> {
       // Open post modal with pre-filled content
       PostNoteModal.getInstance().show(reference);
     } catch (error) {
-      console.error('❌ Failed to open quoted repost editor:', error);
+      console.error('Failed to open quoted repost editor:', error);
       ToastService.show('Failed to open editor', 'error');
     }
   }

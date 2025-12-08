@@ -78,17 +78,8 @@ export class PostEditorToolbar {
     const uploadBtn = container.querySelector('[data-action="upload"]');
     const fileInput = container.querySelector('[data-file-input]') as HTMLInputElement;
 
-    console.log('PostEditorToolbar.setupEventListeners:', {
-      container,
-      uploadBtn,
-      fileInput,
-      hasUploadBtn: !!uploadBtn,
-      hasFileInput: !!fileInput
-    });
-
     if (uploadBtn && fileInput) {
       uploadBtn.addEventListener('click', () => {
-        console.log('Upload button clicked!');
         fileInput.click();
       });
 
@@ -98,8 +89,6 @@ export class PostEditorToolbar {
           this.handleFileUpload(Array.from(target.files));
         }
       });
-    } else {
-      console.error('PostEditorToolbar: Failed to find upload button or file input!', { uploadBtn, fileInput });
     }
 
     // Emoji button
