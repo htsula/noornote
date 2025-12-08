@@ -8,7 +8,19 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            rust_target: x86_64-unknown-linux-gnu
+            go_arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            rust_target: aarch64-unknown-linux-gnu
+            go_arch: arm64
+            runner: ubuntu-24.04-arm
+
+    runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout NoorNote
         uses: actions/checkout@v4
@@ -28,9 +40,9 @@ jobs:
       - name: Build NoorSigner for Linux
         run: |
           cd noorsigner-src
-          GOOS=linux GOARCH=amd64 go build -o noorsigner-x86_64-unknown-linux-gnu -ldflags="-s -w" .
+          GOOS=linux GOARCH=${{ matrix.go_arch }} go build -o noorsigner-${{ matrix.rust_target }} -ldflags="-s -w" .
           mkdir -p ../src-tauri/binaries
-          mv noorsigner-x86_64-unknown-linux-gnu ../src-tauri/binaries/
+          mv noorsigner-${{ matrix.rust_target }} ../src-tauri/binaries/
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -39,6 +51,8 @@ jobs:
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
 
       - name: Install Linux dependencies
         run: |
@@ -67,13 +81,13 @@ jobs:
       - name: Upload .deb
         uses: actions/upload-artifact@v4
         with:
-          name: noornote-linux-deb
+          name: noornote-linux-${{ matrix.arch }}-deb
           path: src-tauri/target/release/bundle/deb/*.deb
 
       - name: Upload AppImage
         uses: actions/upload-artifact@v4
         with:
-          name: noornote-linux-appimage
+          name: noornote-linux-${{ matrix.arch }}-appimage
           path: src-tauri/target/release/bundle/appimage/*.AppImage
 
   release:
@@ -83,16 +97,28 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Download .deb
+      - name: Download amd64 .deb
         uses: actions/download-artifact@v4
         with:
-          name: noornote-linux-deb
+          name: noornote-linux-amd64-deb
           path: release/
 
-      - name: Download AppImage
+      - name: Download amd64 AppImage
         uses: actions/download-artifact@v4
         with:
-          name: noornote-linux-appimage
+          name: noornote-linux-amd64-appimage
+          path: release/
+
+      - name: Download arm64 .deb
+        uses: actions/download-artifact@v4
+        with:
+          name: noornote-linux-arm64-deb
+          path: release/
+
+      - name: Download arm64 AppImage
+        uses: actions/download-artifact@v4
+        with:
+          name: noornote-linux-arm64-appimage
           path: release/
 
       - name: List release contents
