@@ -50,6 +50,9 @@ temp/
 # Screenshots
 screenshots/
 
+# Local documentation (not pushed to repo)
+docs/
+
 # Optional relay (local data only)
 relay/strfry-db/
 relay/*.log
