@@ -300,6 +300,15 @@ export class MainLayout {
       });
     }
 
+    const aboutLink = this.element.querySelector('.sidebar a[href="/about"]');
+    if (aboutLink) {
+      aboutLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        const router = Router.getInstance();
+        router.navigate('/about');
+      });
+    }
+
     const articlesLink = this.element.querySelector('.sidebar a[href="/articles"]');
     if (articlesLink) {
       articlesLink.addEventListener('click', (e) => {
@@ -509,6 +518,9 @@ export class MainLayout {
                 </svg>
                 Cache <span class="cache-size-display">--</span>
               </a>
+            </li>
+            <li class="about-link-item">
+              <a href="/about" class="about-link">About</a>
             </li>
           </ul>
           <div class="new-post-dropup">
