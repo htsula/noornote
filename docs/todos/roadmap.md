@@ -81,42 +81,59 @@ Priorisierte Reihenfolge aller Todos.
 
 ---
 
-## 4. Automatic List Sync (Optional)
+## 4. Automatic List Sync ✅ ABGESCHLOSSEN
 
-**Datei:** `automatic-list-sync.md`
+**Datei:** `../features/automatic-list-sync.md`
 
-**Status:** Geplant, niedrige Priorität
-
-**Scope:**
-- Auto-Sync Switch in Settings
-- Sync bei App-Start / bei Änderungen
-- Conflict Resolution
-
-**Aufwand:** ~8-12h
-
-**Note:** Manuelle Sync funktioniert. Auto-Sync ist Komfort-Feature.
+**Erledigt:**
+- ✅ Easy Mode / Manual Mode Switch in Settings
+- ✅ Auto-Sync bei Änderungen (File sofort, Relays debounced)
+- ✅ Periodischer Sync von Relays (alle 5 Minuten)
+- ✅ Sync bei App-Start + Login
+- ✅ Conflict Resolution mit SyncConfirmationModal
+- ✅ User Mentions mit Avatar in Modal
 
 ---
 
-## 5. NIP-17 Private DMs
+## 5. NIP-17 Private DMs ✅ ABGESCHLOSSEN
 
-**Datei:** `nip17-private-dms.md`
+**Datei:** `../features/nip17-private-dms.md`
 
-**Status:** Geplant
-
-**Scope:**
-- NIP-44 Encryption
-- Gift Wrap / Seal / Rumor (3-Layer)
-- DM Inbox View
-- Conversation Threading
-
-**Aufwand:** ~15-20h
-
-**Note:** Unabhängiges Feature, kann standalone entwickelt werden.
+**Erledigt:**
+- ✅ NIP-44 Encryption
+- ✅ Gift Wrap / Seal / Rumor (3-Layer)
+- ✅ DM Inbox View
+- ✅ Conversation Threading
 
 ---
 
-## 6. NoorSigner Cross-Platform (LETZTES PRE-RELEASE)
+## 6. Legal/Support Static Page
+
+**Status:** Offen
+
+**Scope:**
+- Impressum, Datenschutz (DSGVO)
+- Route: `/legal` oder `/about`
+- Privacy-first, opt-in contact form
+
+**Aufwand:** ~2h
+
+---
+
+## 7. Zap Display Inconsistency
+
+**Status:** Offen
+
+**Scope:**
+- Zaps werden inkonsistent in Notifications dargestellt
+- 4 verschiedene Zustände, Problem: Zap-Receipts (Kind 9735) kommen nicht immer
+- **Ziel:** Optimistische UI nach erfolgreichem Payment
+
+**Aufwand:** ~2-4h Investigation + Fix
+
+---
+
+## 8. NoorSigner Cross-Platform (LETZTES PRE-RELEASE)
 
 **Dateien:** `tauri-only-strategy.md`, `x-platform/*.md`
 
@@ -134,22 +151,6 @@ Priorisierte Reihenfolge aller Todos.
 **Aufwand:** ~12-18h (viel Testing)
 
 **Note:** Aufwendig wegen Cross-Platform-Testing. Daher ganz am Ende vor Release.
-
----
-
-## Kleinere Tasks (Pre-Release)
-
-### Legal/Support Static Page
-- Impressum, Datenschutz (DSGVO)
-- Route: `/legal` oder `/about`
-- Privacy-first, opt-in contact form
-- **Aufwand:** ~2h
-
-### Zap Display Inconsistency
-- Zaps werden inkonsistent in Notifications dargestellt
-- 4 verschiedene Zustände, Problem: Zap-Receipts (Kind 9735) kommen nicht immer
-- **Ziel:** Optimistische UI nach erfolgreichem Payment
-- **Aufwand:** ~2-4h Investigation + Fix
 
 ---
 
@@ -235,13 +236,13 @@ Nach dem ersten Release wird ein Plugin-System eingeführt. Optionale Funktional
 | 1 | Multi-User Integration | - | ✅ Abgeschlossen |
 | 2 | Mutual Check (Phase 2-4) | - | 🔍 Unter Beobachtung |
 | 3 | NIP-51 Bookmark Sets | - | ✅ Abgeschlossen |
-| 4 | Auto List Sync | 8-12h | ⬜ Optional |
-| 5 | NIP-17 Private DMs | 15-20h | ⬜ Offen |
-| 6 | Cross-Platform | 12-18h | ⬜ Letztes |
-| - | Legal Page | 2h | ⬜ Offen |
-| - | Zap Display Fix | 2-4h | ⬜ Offen |
+| 4 | Auto List Sync | - | ✅ Abgeschlossen |
+| 5 | NIP-17 Private DMs | - | ✅ Abgeschlossen |
+| 6 | Legal Page | 2h | ⬜ Offen |
+| 7 | Zap Display Bug | 2-4h | ⬜ Offen |
+| 8 | Cross-Platform | 12-18h | ⬜ Letztes |
 
-**Pre-Release verbleibend:** ~31-54h (ohne optionale Features: ~23-38h)
+**Pre-Release verbleibend:** ~16-24h
 
 ## Zusammenfassung Post-Release
 
