@@ -120,11 +120,12 @@ Vor Release prüfen ob Version angepasst werden soll:
 
 ## Checkliste
 
-- [ ] Fonts löschen (42MB)
-- [ ] .DS_Store entfernen
+- [x] Fonts löschen (42MB)
+- [x] .DS_Store entfernen
 - [ ] Console.log prüfen
 - [ ] TODOs prüfen
 - [ ] Typecheck durchlaufen
 - [ ] Build durchlaufen
-- [ ] Repository URLs korrigieren
+- [x] Repository URLs korrigieren
 - [ ] Version prüfen
+- [ ] Enduser-taugliche README erstellen

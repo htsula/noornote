@@ -31,13 +31,13 @@
   ],
   "author": "Alp <outreach.trend196@4wrd.cc>",
   "license": "MIT",
-  "homepage": "https://gitlab.com/77elements/noornote#readme",
+  "homepage": "https://github.com/77elements/noornote#readme",
   "repository": {
     "type": "git",
-    "url": "https://gitlab.com/77elements/noornote.git"
+    "url": "https://github.com/77elements/noornote.git"
   },
   "bugs": {
-    "url": "https://gitlab.com/77elements/noornote/-/issues"
+    "url": "https://github.com/77elements/noornote/issues"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.9.0",
