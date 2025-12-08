@@ -57,51 +57,37 @@ export class LikeManager extends BaseInteractionManager<LikeManagerConfig> {
    * Handle like action - Show emoji picker
    */
   public handleLike(): void {
-    console.log('🎯 LikeManager handleLike called');
-
     if (!this.requireAuth('like this note')) {
-      console.log('❌ LikeManager: Auth check failed');
       return;
     }
 
-    console.log('✅ LikeManager: Auth check passed');
-
     // Don't allow liking if already liked
     if (this.hasInteracted) {
-      console.log('ℹ️ User has already liked this note');
       ToastService.show('You already liked this note', 'info');
       return;
     }
 
     // Call custom handler if provided
     if (this.config.onLike) {
-      console.log('🔄 LikeManager: Using custom onLike handler');
       this.config.onLike();
       return;
     }
 
     if (!this.button) {
-      console.error('❌ Like button not found');
       return;
     }
 
-    console.log('✅ Like button found');
-
     // Close existing picker if open
     if (this.emojiPicker) {
-      console.log('🔄 Closing existing emoji picker');
       this.emojiPicker.destroy();
       this.emojiPicker = null;
       return;
     }
 
-    console.log('📱 Creating emoji picker...');
-
     // Create and show emoji picker
     this.emojiPicker = new EmojiPicker({
       triggerElement: this.button,
       onSelect: (emoji) => {
-        console.log('😀 Emoji selected:', emoji);
         this.publishReaction(emoji);
         this.emojiPicker?.hide();
         this.emojiPicker?.destroy();
@@ -110,15 +96,12 @@ export class LikeManager extends BaseInteractionManager<LikeManagerConfig> {
     });
 
     this.emojiPicker.show();
-    console.log('✅ Emoji picker shown');
   }
 
   /**
    * Publish reaction to note with selected emoji
    */
   private async publishReaction(emoji: string): Promise<void> {
-    console.log('📤 LikeManager publishReaction called with emoji:', emoji);
-
     // Disable like button immediately to prevent multiple clicks
     const likeBtn = this.button as HTMLButtonElement;
     if (likeBtn) {
@@ -128,15 +111,11 @@ export class LikeManager extends BaseInteractionManager<LikeManagerConfig> {
     try {
       const writeRelays = await RelayConfig.getInstance().getWriteRelays();
 
-      console.log('📡 Write relays:', writeRelays);
-
       if (writeRelays.length === 0) {
-        console.error('❌ No write relays configured');
+        console.error('No write relays configured');
         if (likeBtn) likeBtn.disabled = false;
         return;
       }
-
-      console.log('🎯 Publishing reaction to note:', this.config.noteId, 'by author:', this.config.authorPubkey);
 
       const result = await this.reactionService.publishReaction({
         noteId: this.config.noteId,
@@ -145,23 +124,19 @@ export class LikeManager extends BaseInteractionManager<LikeManagerConfig> {
         relays: writeRelays
       });
 
-      console.log('✅ Reaction published, result:', result);
-
       if (result.success) {
         // Update stats (cache invalidation + optimistic UI update)
         this.updateStats('like');
-        console.log('✅ Stats updated via StatsUpdateService');
 
         // Update liked state and button appearance
         this.hasInteracted = true;
         this.updateButtonState(true);
-        console.log('✅ Like button state updated to active');
       } else {
         // Re-enable button if publishing failed
         if (likeBtn) likeBtn.disabled = false;
       }
     } catch (error) {
-      console.error('❌ Failed to publish reaction:', error);
+      console.error('Failed to publish reaction:', error);
       if (likeBtn) likeBtn.disabled = false;
     }
   }
