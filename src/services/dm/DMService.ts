@@ -318,8 +318,6 @@ export class DMService {
       const rumor = await this.unwrapGiftWrap(wrapEvent);
 
       if (!rumor) {
-        // Silent fail for console only - expected for non-NIP-17 events
-        console.debug('[DMService] Failed to unwrap event', wrapEvent.id.slice(0, 8));
         return;
       }
 
@@ -470,10 +468,8 @@ export class DMService {
 
       const rumor = JSON.parse(rumorJson) as NostrEvent;
 
-      // Verify rumor is kind:14
+      /// Verify rumor is kind:14
       if (rumor.kind !== KIND_PRIVATE_MESSAGE) {
-        // Expected for non-DM events wrapped in gift wraps - console only
-        console.debug('[DMService] Expected rumor (kind:14), got kind:', rumor.kind);
         return null;
       }
 
