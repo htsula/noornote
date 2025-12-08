@@ -10,6 +10,7 @@ import { SingleNoteView } from './components/views/SingleNoteView';
 import { ProfileView } from './components/views/ProfileView';
 import { ArticleView } from './components/views/ArticleView';
 import { SettingsView } from './components/views/SettingsView';
+import { AboutView } from './components/views/AboutView';
 import { Timeline } from './components/timeline/Timeline';
 import { AuthService } from './services/AuthService';
 import { SystemLogger } from './components/system/SystemLogger';
@@ -225,6 +226,20 @@ export class App {
       true
     );
 
+    // About View (Imprint + Privacy) - no auth required
+    this.router.register(
+      '/about',
+      () => {
+        this.appState.setState('view', {
+          currentView: 'about'
+        });
+        this.mountPrimaryContent('about');
+        this.mountSecondaryContent('debug-log');
+      },
+      'abv',
+      false
+    );
+
     // Messages View (NIP-17 DMs) - requires authentication
     this.router.register(
       '/messages',
@@ -366,6 +381,13 @@ export class App {
         // SettingsView: New instance
         const settingsView = new SettingsView();
         primaryContent.appendChild(settingsView.getElement());
+        break;
+      }
+
+      case 'about': {
+        // AboutView: Imprint and Privacy Policy
+        const aboutView = new AboutView();
+        primaryContent.appendChild(aboutView.getElement());
         break;
       }
 
