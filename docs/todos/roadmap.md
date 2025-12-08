@@ -107,16 +107,14 @@ Priorisierte Reihenfolge aller Todos.
 
 ---
 
-## 6. Legal/Support Static Page
+## 6. Legal/Support Static Page ✅ ABGESCHLOSSEN
 
-**Status:** Offen
+**Status:** Fertig
 
-**Scope:**
-- Impressum, Datenschutz (DSGVO)
-- Route: `/legal` oder `/about`
-- Privacy-first, opt-in contact form
-
-**Aufwand:** ~2h
+**Umgesetzt:**
+- About Page mit Impressum + Privacy Policy
+- Route: `/about`
+- Dezenter Link in Sidebar
 
 ---
 
@@ -231,11 +229,11 @@ Nach dem ersten Release wird ein Plugin-System eingeführt. Optionale Funktional
 | 3 | NIP-51 Bookmark Sets | - | ✅ Abgeschlossen |
 | 4 | Auto List Sync | - | ✅ Abgeschlossen |
 | 5 | NIP-17 Private DMs | - | ✅ Abgeschlossen |
-| 6 | Legal Page | 2h | ⬜ Offen |
+| 6 | Legal Page | - | ✅ Abgeschlossen |
 | 7 | Zap Display Bug | - | ✅ Abgeschlossen |
 | 8 | Cross-Platform | 12-18h | ⬜ Letztes |
 
-**Pre-Release verbleibend:** ~14-20h
+**Pre-Release verbleibend:** ~12-18h
 
 ## Zusammenfassung Post-Release
 
