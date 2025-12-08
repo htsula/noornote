@@ -15,7 +15,7 @@ export class DMBadgeManager {
   private dmService: DMService;
   private authService: AuthService;
   private badgeElement: HTMLElement | null = null;
-  private badgeUpdateSubscriptionId: string | null = null;
+  private subscriptionIds: string[] = [];
 
   constructor(badgeElement: HTMLElement) {
     this.badgeElement = badgeElement;
@@ -24,16 +24,27 @@ export class DMBadgeManager {
     this.authService = AuthService.getInstance();
 
     this.setupEventListeners();
-    this.updateBadgeCount();
+    // Don't call updateBadgeCount() here - wait for dm:fetch-complete or dm:badge-update
+    // This fixes the race condition where badge tried to update before DMs were loaded
   }
 
   /**
    * Setup event listeners for badge updates
    */
   private setupEventListeners(): void {
-    this.badgeUpdateSubscriptionId = this.eventBus.on('dm:badge-update', () => {
-      this.updateBadgeCount();
-    });
+    // Update badge when DM fetch completes (initial load)
+    this.subscriptionIds.push(
+      this.eventBus.on('dm:fetch-complete', () => {
+        this.updateBadgeCount();
+      })
+    );
+
+    // Update badge on explicit badge-update events (mark read/unread, new messages)
+    this.subscriptionIds.push(
+      this.eventBus.on('dm:badge-update', () => {
+        this.updateBadgeCount();
+      })
+    );
   }
 
   /**
@@ -58,7 +69,7 @@ export class DMBadgeManager {
       } else {
         this.badgeElement.style.display = 'none';
       }
-    } catch (error) {
+    } catch {
       // Silently fail - badge is not critical
       this.badgeElement.style.display = 'none';
     }
@@ -68,9 +79,7 @@ export class DMBadgeManager {
    * Cleanup
    */
   public destroy(): void {
-    if (this.badgeUpdateSubscriptionId) {
-      this.eventBus.off(this.badgeUpdateSubscriptionId);
-      this.badgeUpdateSubscriptionId = null;
-    }
+    this.subscriptionIds.forEach(id => this.eventBus.off(id));
+    this.subscriptionIds = [];
   }
 }
