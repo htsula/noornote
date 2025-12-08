@@ -20,6 +20,7 @@ import { ToastService } from '../../services/ToastService';
 import { setupTabClickHandlers, switchTabWithContent } from '../../helpers/TabsHelper';
 import { escapeHtml } from '../../helpers/escapeHtml';
 import { ProgressBarHelper } from '../../helpers/ProgressBarHelper';
+import { DMComposeModal } from '../modals/DMComposeModal';
 
 const BATCH_SIZE = 15;
 
@@ -509,8 +510,8 @@ export class MessagesView extends View {
    * Open compose modal for new message
    */
   private openComposeModal(): void {
-    // See docs/todos/dm-compose-modal.md
-    this.systemLogger.info('MessagesView', 'Compose modal not yet implemented');
+    const modal = new DMComposeModal();
+    modal.show();
   }
 
   /**
