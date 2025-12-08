@@ -53,6 +53,10 @@ screenshots/
 # Local documentation (not pushed to repo)
 docs/
 
+# Claude Code
+CLAUDE.md
+.claude/
+
 # Optional relay (local data only)
 relay/strfry-db/
 relay/*.log
