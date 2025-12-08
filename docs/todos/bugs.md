@@ -9,13 +9,8 @@
 - **Symptom:** Falsche Notifications in der NV, gleiche User tauchen immer wieder auf
 - **Status:** Scheduler DEAKTIVIERT in `MutualChangeService.ts` (zu viele False Positives). Manuelle Checks über Follows-Tab funktionieren weiterhin.
 
-### Mutual Follow Badge Widerspruch
-- **Screenshot:** `screenshots/bugs/mutual-follow-bug.png`
-- **Referenz:** `docs/features/mutual-check-feature-01-static-list.md`
-- **Problem:** Follow-Liste zeigt "Not following back" für User, aber dessen Profil zeigt "Follows you"
-- **Erwartung:** Wenn Profil "Follows you" anzeigt, sollte Mutual-Check "Mutual" sein
-
 ## Fixed
 
+- **Mutual Follow Badge Widerspruch** - Follow-Liste zeigte "Not following back", Profil zeigte "Follows you". Ursache: MutualService und UserService holten Kind:3 Events separat, NDK Cache wurde inkonsistent. Fix: MutualService nutzt jetzt UserService als einzige Datenquelle.
 - **In-folder bookmark reordering** - Items innerhalb eines Folders ließen sich nicht per Drag & Drop umsortieren (Fixed: 599bb5a)
 - **Profile list order mismatch** - Reihenfolge in Profile Lists stimmte nicht mit Folder-Reihenfolge überein (Fixed: 599bb5a)

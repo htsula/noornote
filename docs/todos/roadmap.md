@@ -120,16 +120,9 @@ Priorisierte Reihenfolge aller Todos.
 
 ---
 
-## 7. Zap Display Inconsistency
+## 7. Zap Display Inconsistency ✅ ABGESCHLOSSEN
 
-**Status:** Offen
-
-**Scope:**
-- Zaps werden inkonsistent in Notifications dargestellt
-- 4 verschiedene Zustände, Problem: Zap-Receipts (Kind 9735) kommen nicht immer
-- **Ziel:** Optimistische UI nach erfolgreichem Payment
-
-**Aufwand:** ~2-4h Investigation + Fix
+**Status:** Gefixt
 
 ---
 
@@ -239,10 +232,10 @@ Nach dem ersten Release wird ein Plugin-System eingeführt. Optionale Funktional
 | 4 | Auto List Sync | - | ✅ Abgeschlossen |
 | 5 | NIP-17 Private DMs | - | ✅ Abgeschlossen |
 | 6 | Legal Page | 2h | ⬜ Offen |
-| 7 | Zap Display Bug | 2-4h | ⬜ Offen |
+| 7 | Zap Display Bug | - | ✅ Abgeschlossen |
 | 8 | Cross-Platform | 12-18h | ⬜ Letztes |
 
-**Pre-Release verbleibend:** ~16-24h
+**Pre-Release verbleibend:** ~14-20h
 
 ## Zusammenfassung Post-Release
 
