@@ -3,9 +3,8 @@ name: Build Linux
 on:
   workflow_dispatch:  # Manual trigger
   push:
-    branches:
-      - main
-      - development
+    tags:
+      - 'v*'
 
 jobs:
   build-noorsigner:
@@ -21,6 +20,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.24'
+          cache: false
 
       - name: Build NoorSigner for Linux
         run: |
@@ -64,9 +64,6 @@ jobs:
       - name: Build Tauri App
         run: npm run tauri build
 
-      - name: List build outputs
-        run: find src-tauri/target/release/bundle -type f -name "*.deb" -o -name "*.AppImage" 2>/dev/null || echo "Checking bundle directory..."
-
       - name: Upload .deb
         uses: actions/upload-artifact@v4
         with:
@@ -79,33 +76,36 @@ jobs:
           name: noornote-linux-appimage
           path: src-tauri/target/release/bundle/appimage/*.AppImage
 
-  package:
+  release:
     needs: [build-noorsigner, build-noornote]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Download NoorSigner
         uses: actions/download-artifact@v4
         with:
           name: noorsigner-linux-amd64
-          path: package/
+          path: release/
 
       - name: Download NoorNote .deb
         uses: actions/download-artifact@v4
         with:
           name: noornote-linux-deb
-          path: package/
+          path: release/
 
       - name: Download NoorNote AppImage
         uses: actions/download-artifact@v4
         with:
           name: noornote-linux-appimage
-          path: package/
+          path: release/
 
-      - name: List package contents
-        run: ls -la package/
+      - name: List release contents
+        run: ls -la release/
 
-      - name: Upload combined package
-        uses: actions/upload-artifact@v4
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
         with:
-          name: noornote-linux-complete
-          path: package/
+          files: release/*
+          generate_release_notes: true
+          draft: false
