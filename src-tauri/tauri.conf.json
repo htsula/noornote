@@ -1,6 +1,6 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "Noornote",
+  "productName": "NoorNote",
   "version": "0.7.1",
   "identifier": "com.noornote.desktop",
   "build": {
@@ -12,14 +12,14 @@
   "app": {
     "windows": [
       {
-        "title": "Noornote",
+        "title": "NoorNote",
         "width": 1400,
         "height": 1200,
         "minWidth": 1200,
         "minHeight": 800,
         "resizable": true,
         "fullscreen": false,
-        "userAgent": "NoorNote/0.1.0"
+        "userAgent": "NoorNote/0.7.1"
       }
     ],
     "security": {
@@ -39,7 +39,18 @@
     "resources": [],
     "externalBin": [
       "binaries/noorsigner"
-    ]
+    ],
+    "license": "MIT",
+    "licenseFile": "../LICENSE",
+    "homepage": "https://github.com/77elements/noornote/releases",
+    "shortDescription": "A Nostr desktop client for sovereign communication",
+    "longDescription": "NoorNote is a privacy-focused Nostr desktop client. Features include encrypted direct messages (NIP-17), Lightning zaps, bookmark management, and secure local key storage via NoorSigner.",
+    "linux": {
+      "deb": {
+        "section": "net",
+        "priority": "optional"
+      }
+    }
   },
   "plugins": {
     "fs": {
