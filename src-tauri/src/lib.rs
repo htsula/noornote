@@ -32,7 +32,8 @@ pub fn run() {
       key_signer::key_signer_request,
       key_signer::launch_key_signer,
       key_signer::check_trust_session,
-      key_signer::cancel_key_signer_launch
+      key_signer::cancel_key_signer_launch,
+      key_signer::ensure_noorsigner_installed
     ])
     .setup(|app| {
       // Register global keyboard shortcuts

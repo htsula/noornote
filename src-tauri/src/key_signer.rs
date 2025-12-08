@@ -1,6 +1,6 @@
 /**
  * KeySigner Tauri Commands
- * Handles communication with clistr-key-signer Unix socket daemon
+ * Handles communication with NoorSigner Unix socket daemon
  */
 
 use std::io::{BufRead, BufReader, Write};
@@ -10,7 +10,23 @@ use tauri::command;
 #[cfg(unix)]
 use std::os::unix::net::UnixStream;
 
-/// Get socket path based on platform
+/// Get the base path for NoorNote data (~/.noornote/)
+fn get_noornote_base_path() -> Result<PathBuf, String> {
+    #[cfg(unix)]
+    {
+        let home = std::env::var("HOME")
+            .map_err(|_| "Failed to get HOME directory".to_string())?;
+        Ok(PathBuf::from(home).join(".noornote"))
+    }
+    #[cfg(windows)]
+    {
+        let home = std::env::var("USERPROFILE")
+            .map_err(|_| "Failed to get USERPROFILE directory".to_string())?;
+        Ok(PathBuf::from(home).join(".noornote"))
+    }
+}
+
+/// Get socket path - under ~/.noorsigner/ (NoorSigner's own directory)
 fn get_socket_path() -> Result<PathBuf, String> {
     #[cfg(unix)]
     {
@@ -23,6 +39,124 @@ fn get_socket_path() -> Result<PathBuf, String> {
         // Named pipe path for Windows
         Ok(PathBuf::from(r"\\.\pipe\noorsigner"))
     }
+}
+
+/// Get NoorSigner binary path - always ~/.noornote/bin/noorsigner
+/// Same path for dev and prod - no more dev/prod distinction
+fn get_noorsigner_path() -> Result<PathBuf, String> {
+    #[cfg(unix)]
+    {
+        Ok(get_noornote_base_path()?.join("bin").join("noorsigner"))
+    }
+    #[cfg(windows)]
+    {
+        Ok(get_noornote_base_path()?.join("bin").join("noorsigner.exe"))
+    }
+}
+
+/// Get the sidecar binary path from the app bundle
+/// This is where Tauri places the bundled NoorSigner binary
+fn get_sidecar_source_path() -> Result<PathBuf, String> {
+    // Get current executable path
+    let exe_path = std::env::current_exe()
+        .map_err(|e| format!("Failed to get current executable path: {}", e))?;
+
+    let exe_dir = exe_path.parent()
+        .ok_or_else(|| "Failed to get executable directory".to_string())?;
+
+    // Target triple based on platform
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    let target_triple = "x86_64-unknown-linux-gnu";
+
+    #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+    let target_triple = "aarch64-unknown-linux-gnu";
+
+    #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+    let target_triple = "x86_64-apple-darwin";
+
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    let target_triple = "aarch64-apple-darwin";
+
+    #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+    let target_triple = "x86_64-pc-windows-msvc";
+
+    // Possible locations for the sidecar binary
+    let sidecar_name = format!("noorsigner-{}", target_triple);
+
+    #[cfg(windows)]
+    let sidecar_name = format!("{}.exe", sidecar_name);
+
+    // Check multiple possible locations
+    let possible_paths = [
+        // Next to executable (tarball installation)
+        exe_dir.join(&sidecar_name),
+        // Linux .deb: /usr/lib/noornote/
+        PathBuf::from("/usr/lib/noornote").join(&sidecar_name),
+        PathBuf::from("/usr/lib/NoorNote").join(&sidecar_name),
+        // macOS: Inside app bundle
+        exe_dir.join("../Resources").join(&sidecar_name),
+        // Development: in src-tauri/binaries/
+        exe_dir.join("../../binaries").join(&sidecar_name),
+    ];
+
+    for path in &possible_paths {
+        if path.exists() {
+            return Ok(path.clone());
+        }
+    }
+
+    Err(format!(
+        "NoorSigner sidecar not found. Searched for '{}' in: {:?}",
+        sidecar_name,
+        possible_paths
+    ))
+}
+
+/// Ensure NoorSigner is installed at ~/.noornote/bin/noorsigner
+/// Copies from app bundle if not present or if bundle version is newer
+#[command]
+pub async fn ensure_noorsigner_installed() -> Result<String, String> {
+    use std::fs;
+
+    let target_path = get_noorsigner_path()?;
+    let target_dir = target_path.parent()
+        .ok_or_else(|| "Failed to get target directory".to_string())?;
+
+    // Create ~/.noornote/bin/ if it doesn't exist
+    if !target_dir.exists() {
+        fs::create_dir_all(target_dir)
+            .map_err(|e| format!("Failed to create directory {:?}: {}", target_dir, e))?;
+        println!("Created directory: {:?}", target_dir);
+    }
+
+    // Check if NoorSigner already exists
+    if target_path.exists() {
+        println!("NoorSigner already installed at: {:?}", target_path);
+        return Ok(target_path.display().to_string());
+    }
+
+    // Find sidecar in bundle
+    let source_path = get_sidecar_source_path()?;
+    println!("Found NoorSigner sidecar at: {:?}", source_path);
+
+    // Copy to target location
+    fs::copy(&source_path, &target_path)
+        .map_err(|e| format!("Failed to copy NoorSigner from {:?} to {:?}: {}", source_path, target_path, e))?;
+
+    // Make executable (Unix only)
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&target_path)
+            .map_err(|e| format!("Failed to get permissions: {}", e))?
+            .permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&target_path, perms)
+            .map_err(|e| format!("Failed to set executable permission: {}", e))?;
+    }
+
+    println!("NoorSigner installed to: {:?}", target_path);
+    Ok(target_path.display().to_string())
 }
 
 /// Send JSON-RPC request to KeySigner daemon via Unix socket
@@ -88,7 +222,7 @@ pub async fn check_trust_session() -> Result<bool, String> {
 
     let home = std::env::var("HOME")
         .map_err(|_| "Failed to get HOME directory".to_string())?;
-    let trust_session_path = PathBuf::from(&home)
+    let trust_session_path = PathBuf::from(home)
         .join(".noorsigner")
         .join("trust_session");
 
@@ -173,15 +307,10 @@ pub async fn cancel_key_signer_launch() -> Result<(), String> {
 pub async fn launch_key_signer(mode: String) -> Result<(), String> {
     use std::process::Command;
 
-    let noorsigner_path = if cfg!(debug_assertions) {
-        // Dev: self-compiled binary in ../noorsigner/
-        let home = std::env::var("HOME")
-            .map_err(|_| "Failed to get HOME directory".to_string())?;
-        PathBuf::from(home).join("projects").join("noorsigner").join("noorsigner")
-    } else {
-        // Production: installed in /usr/local/bin/
-        PathBuf::from("/usr/local/bin/noorsigner")
-    };
+    // Ensure NoorSigner is installed first
+    ensure_noorsigner_installed().await?;
+
+    let noorsigner_path = get_noorsigner_path()?;
 
     // Verify binary exists
     if !noorsigner_path.exists() {
@@ -276,7 +405,7 @@ pub async fn launch_key_signer(mode: String) -> Result<(), String> {
         // Delete invalid trust session
         let home = std::env::var("HOME")
             .map_err(|_| "Failed to get HOME directory".to_string())?;
-        let trust_session_path = PathBuf::from(&home)
+        let trust_session_path = PathBuf::from(home)
             .join(".noorsigner")
             .join("trust_session");
 
@@ -292,80 +421,89 @@ pub async fn launch_key_signer(mode: String) -> Result<(), String> {
     // Open terminal for user input
     println!("Launching in terminal for user input");
 
-        #[cfg(target_os = "macos")]
-        {
-            let terminal_command = format!("{} {}", noorsigner_path.display(), command);
+    #[cfg(target_os = "macos")]
+    {
+        let terminal_command = format!("{} {}", noorsigner_path.display(), command);
 
-            println!("=== DEBUG: Terminal command to execute ===");
-            println!("Binary path: {}", noorsigner_path.display());
-            println!("Command: {}", command);
-            println!("Full terminal_command: {}", terminal_command);
+        println!("=== DEBUG: Terminal command to execute ===");
+        println!("Binary path: {}", noorsigner_path.display());
+        println!("Command: {}", command);
+        println!("Full terminal_command: {}", terminal_command);
 
-            // Launch terminal with noorsigner
-            // Use 'activate' BEFORE 'do script' to ensure Terminal.app is ready
-            // This prevents silent failures when Terminal was previously closed
-            let applescript = format!(
-                "tell application \"Terminal\"\n\
-                 activate\n\
-                 do script \"{}\"\n\
-                 end tell",
-                terminal_command
-            );
+        // Launch terminal with noorsigner
+        // Use 'activate' BEFORE 'do script' to ensure Terminal.app is ready
+        // This prevents silent failures when Terminal was previously closed
+        let applescript = format!(
+            "tell application \"Terminal\"\n\
+             activate\n\
+             do script \"{}\"\n\
+             end tell",
+            terminal_command
+        );
 
-            println!("AppleScript:\n{}", applescript);
+        println!("AppleScript:\n{}", applescript);
 
-            let output = Command::new("osascript")
-                .arg("-e")
-                .arg(&applescript)
-                .output()
-                .map_err(|e| format!("Failed to launch Terminal.app: {}", e))?;
+        let output = Command::new("osascript")
+            .arg("-e")
+            .arg(&applescript)
+            .output()
+            .map_err(|e| format!("Failed to launch Terminal.app: {}", e))?;
 
-            // Check if osascript failed
-            if !output.status.success() {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                println!("osascript FAILED!");
-                println!("stderr: {}", stderr);
-                println!("stdout: {}", stdout);
-                return Err(format!("osascript failed: {}", stderr));
-            }
-
-            println!("Terminal.app launched successfully via osascript");
+        // Check if osascript failed
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            println!("osascript FAILED!");
+            println!("stderr: {}", stderr);
+            println!("stdout: {}", stdout);
+            return Err(format!("osascript failed: {}", stderr));
         }
 
-        #[cfg(target_os = "linux")]
-        {
-            // Try common terminal emulators
-            let terminals = ["gnome-terminal", "konsole", "xterm"];
-            let mut launched = false;
+        println!("Terminal.app launched successfully via osascript");
+    }
 
-            for terminal in &terminals {
-                if let Ok(_) = Command::new(terminal)
-                    .arg("-e")
+    #[cfg(target_os = "linux")]
+    {
+        // Try common terminal emulators
+        let terminals = ["gnome-terminal", "konsole", "xterm"];
+        let mut launched = false;
+
+        for terminal in &terminals {
+            let result = if *terminal == "gnome-terminal" {
+                // gnome-terminal uses -- to separate its args from the command
+                Command::new(terminal)
+                    .arg("--")
                     .arg(noorsigner_path.to_str().unwrap())
                     .arg(command)
                     .spawn()
-                {
-                    launched = true;
-                    break;
-                }
-            }
+            } else {
+                Command::new(terminal)
+                    .arg("-e")
+                    .arg(format!("{} {}", noorsigner_path.display(), command))
+                    .spawn()
+            };
 
-            if !launched {
-                return Err("No terminal emulator found. Please install gnome-terminal, konsole, or xterm.".to_string());
+            if result.is_ok() {
+                launched = true;
+                break;
             }
         }
 
-        #[cfg(target_os = "windows")]
-        {
-            Command::new("cmd")
-                .arg("/c")
-                .arg("start")
-                .arg(noorsigner_path.to_str().unwrap())
-                .arg(command)
-                .spawn()
-                .map_err(|e| format!("Failed to launch NoorSigner: {}", e))?;
+        if !launched {
+            return Err("No terminal emulator found. Please install gnome-terminal, konsole, or xterm.".to_string());
         }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("cmd")
+            .arg("/c")
+            .arg("start")
+            .arg(noorsigner_path.to_str().unwrap())
+            .arg(command)
+            .spawn()
+            .map_err(|e| format!("Failed to launch NoorSigner: {}", e))?;
+    }
 
     println!("NoorSigner launched successfully");
 
