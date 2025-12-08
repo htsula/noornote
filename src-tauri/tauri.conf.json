@@ -3,6 +3,7 @@
   "productName": "NoorNote",
   "version": "0.7.5",
   "identifier": "com.noornote.desktop",
+  "mainBinaryName": "noornote",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:3000",

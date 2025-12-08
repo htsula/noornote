@@ -90,9 +90,8 @@ fn get_sidecar_source_path() -> Result<PathBuf, String> {
     let possible_paths = [
         // Next to executable (tarball installation)
         exe_dir.join(&sidecar_name),
-        // Linux .deb: /usr/lib/noornote/
+        // Linux .deb: /usr/lib/noornote/ (mainBinaryName = "noornote")
         PathBuf::from("/usr/lib/noornote").join(&sidecar_name),
-        PathBuf::from("/usr/lib/NoorNote").join(&sidecar_name),
         // macOS: Inside app bundle
         exe_dir.join("../Resources").join(&sidecar_name),
         // Development: in src-tauri/binaries/
