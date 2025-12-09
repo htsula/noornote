@@ -72,12 +72,36 @@ jobs:
       - name: Build Tauri App (deb + rpm only)
         run: npm run tauri build -- --bundles deb,rpm
 
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Create tarball
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          TARBALL_DIR="NoorNote-${VERSION}-linux-${{ matrix.arch }}"
+          mkdir -p "${TARBALL_DIR}"
+
+          # Copy NoorNote binary
+          cp src-tauri/target/release/noornote "${TARBALL_DIR}/"
+
+          # Copy NoorSigner sidecar
+          cp src-tauri/binaries/noorsigner-${{ matrix.rust_target }} "${TARBALL_DIR}/"
+
+          # Create tarball
+          tar -czvf "${TARBALL_DIR}.tar.gz" "${TARBALL_DIR}"
+
+          echo "Created: ${TARBALL_DIR}.tar.gz"
+          ls -lh "${TARBALL_DIR}.tar.gz"
+
       - name: List build outputs
         run: |
           echo "=== .deb files ==="
           find src-tauri/target/release/bundle -name "*.deb" -exec ls -lh {} \; 2>/dev/null || true
           echo "=== .rpm files ==="
           find src-tauri/target/release/bundle -name "*.rpm" -exec ls -lh {} \; 2>/dev/null || true
+          echo "=== .tar.gz files ==="
+          ls -lh *.tar.gz 2>/dev/null || true
 
       - name: Upload .deb
         uses: actions/upload-artifact@v4
@@ -90,6 +114,12 @@ jobs:
         with:
           name: noornote-linux-${{ matrix.arch }}-rpm
           path: src-tauri/target/release/bundle/rpm/*.rpm
+
+      - name: Upload tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: noornote-linux-${{ matrix.arch }}-tarball
+          path: "*.tar.gz"
 
   release:
     needs: [build]
@@ -110,6 +140,12 @@ jobs:
           name: noornote-linux-amd64-rpm
           path: release/
 
+      - name: Download amd64 tarball
+        uses: actions/download-artifact@v4
+        with:
+          name: noornote-linux-amd64-tarball
+          path: release/
+
       - name: Download arm64 .deb
         uses: actions/download-artifact@v4
         with:
@@ -120,6 +156,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: noornote-linux-arm64-rpm
+          path: release/
+
+      - name: Download arm64 tarball
+        uses: actions/download-artifact@v4
+        with:
+          name: noornote-linux-arm64-tarball
           path: release/
 
       - name: List release contents

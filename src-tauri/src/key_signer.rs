@@ -80,22 +80,28 @@ fn get_sidecar_source_path() -> Result<PathBuf, String> {
     #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
     let target_triple = "x86_64-pc-windows-msvc";
 
-    // Possible locations for the sidecar binary
-    let sidecar_name = format!("noorsigner-{}", target_triple);
+    // Sidecar binary names
+    // Tauri strips the target triple when bundling for .deb/.rpm, but keeps it for dev
+    let sidecar_with_triple = format!("noorsigner-{}", target_triple);
+
+    #[cfg(not(windows))]
+    let sidecar_simple = "noorsigner".to_string();
 
     #[cfg(windows)]
-    let sidecar_name = format!("{}.exe", sidecar_name);
+    let sidecar_with_triple = format!("{}.exe", sidecar_with_triple);
+    #[cfg(windows)]
+    let sidecar_simple = "noorsigner.exe".to_string();
 
     // Check multiple possible locations
     let possible_paths = [
-        // Next to executable (tarball installation)
-        exe_dir.join(&sidecar_name),
-        // Linux .deb: /usr/lib/noornote/ (mainBinaryName = "noornote")
-        PathBuf::from("/usr/lib/noornote").join(&sidecar_name),
+        // Linux .deb/.rpm: /usr/bin/noorsigner (no triple)
+        exe_dir.join(&sidecar_simple),
+        // Tarball: next to executable with triple
+        exe_dir.join(&sidecar_with_triple),
         // macOS: Inside app bundle
-        exe_dir.join("../Resources").join(&sidecar_name),
+        exe_dir.join("../Resources").join(&sidecar_with_triple),
         // Development: in src-tauri/binaries/
-        exe_dir.join("../../binaries").join(&sidecar_name),
+        exe_dir.join("../../binaries").join(&sidecar_with_triple),
     ];
 
     for path in &possible_paths {
@@ -105,8 +111,9 @@ fn get_sidecar_source_path() -> Result<PathBuf, String> {
     }
 
     Err(format!(
-        "NoorSigner sidecar not found. Searched for '{}' in: {:?}",
-        sidecar_name,
+        "NoorSigner sidecar not found. Searched for '{}' or '{}' in: {:?}",
+        sidecar_simple,
+        sidecar_with_triple,
         possible_paths
     ))
 }
