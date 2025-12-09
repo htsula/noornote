@@ -543,9 +543,12 @@ pub async fn launch_key_signer(mode: String) -> Result<(), String> {
 
     #[cfg(target_os = "windows")]
     {
+        // "start" requires empty title ("") before the executable path
+        // Otherwise it interprets the path as the window title
         Command::new("cmd")
             .arg("/c")
             .arg("start")
+            .arg("")  // Window title (empty)
             .arg(noorsigner_path.to_str().unwrap())
             .arg(command)
             .spawn()
