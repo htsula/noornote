@@ -94,19 +94,21 @@ pub fn run() {
 fn register_global_shortcuts(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
   let handle = app.handle();
 
-  // Register shortcuts (handler is already set in plugin initialization)
-  handle.global_shortcut().register(
-    Shortcut::new(Some(Modifiers::SUPER), Code::Enter)
-  )?;
-  handle.global_shortcut().register(
-    Shortcut::new(Some(Modifiers::SUPER), Code::KeyK)
-  )?;
-  handle.global_shortcut().register(
-    Shortcut::new(Some(Modifiers::SUPER), Code::ArrowLeft)
-  )?;
-  handle.global_shortcut().register(
-    Shortcut::new(Some(Modifiers::SUPER), Code::ArrowRight)
-  )?;
+  // Register shortcuts - ignore errors if already registered by system/other apps
+  // On Windows, Win+Enter is used by Narrator, so it may fail
+  let shortcuts = [
+    Shortcut::new(Some(Modifiers::SUPER), Code::Enter),
+    Shortcut::new(Some(Modifiers::SUPER), Code::KeyK),
+    Shortcut::new(Some(Modifiers::SUPER), Code::ArrowLeft),
+    Shortcut::new(Some(Modifiers::SUPER), Code::ArrowRight),
+  ];
+
+  for shortcut in shortcuts {
+    if let Err(e) = handle.global_shortcut().register(shortcut) {
+      eprintln!("Warning: Failed to register shortcut {:?}: {}", shortcut, e);
+      // Continue with other shortcuts instead of crashing
+    }
+  }
 
   Ok(())
 }
