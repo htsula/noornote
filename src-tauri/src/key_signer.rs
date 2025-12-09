@@ -212,9 +212,33 @@ pub async fn key_signer_request(request: String) -> Result<String, String> {
 
     #[cfg(windows)]
     {
-        // Windows Named Pipes implementation
-        // TODO: Implement Windows named pipe support
-        Err("Windows named pipes not yet implemented".to_string())
+        use std::fs::OpenOptions;
+        use std::time::Duration;
+
+        let pipe_path = r"\\.\pipe\noorsigner";
+
+        // Connect to Named Pipe
+        let mut pipe = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(pipe_path)
+            .map_err(|e| format!("Failed to connect to KeySigner daemon: {}. Is the daemon running?", e))?;
+
+        // Send request with newline
+        let request_with_newline = format!("{}\n", request);
+        pipe.write_all(request_with_newline.as_bytes())
+            .map_err(|e| format!("Failed to send request: {}", e))?;
+        pipe.flush()
+            .map_err(|e| format!("Failed to flush request: {}", e))?;
+
+        // Read response line-by-line
+        let mut reader = BufReader::new(&pipe);
+        let mut response = String::new();
+        reader
+            .read_line(&mut response)
+            .map_err(|e| format!("Failed to read response: {}", e))?;
+
+        Ok(response.trim_end().to_string())
     }
 }
 
@@ -224,11 +248,22 @@ pub async fn check_trust_session() -> Result<bool, String> {
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    let home = std::env::var("HOME")
-        .map_err(|_| "Failed to get HOME directory".to_string())?;
-    let trust_session_path = PathBuf::from(home)
-        .join(".noorsigner")
-        .join("trust_session");
+    // Get NoorSigner storage directory (platform-specific)
+    #[cfg(unix)]
+    let noorsigner_dir = {
+        let home = std::env::var("HOME")
+            .map_err(|_| "Failed to get HOME directory".to_string())?;
+        PathBuf::from(home).join(".noorsigner")
+    };
+
+    #[cfg(windows)]
+    let noorsigner_dir = {
+        let appdata = std::env::var("APPDATA")
+            .map_err(|_| "Failed to get APPDATA directory".to_string())?;
+        PathBuf::from(appdata).join("NoorSigner")
+    };
+
+    let trust_session_path = noorsigner_dir.join("trust_session");
 
     // Check if trust session file exists
     if !trust_session_path.exists() {
@@ -406,12 +441,20 @@ pub async fn launch_key_signer(mode: String) -> Result<(), String> {
         // Socket didn't appear - trust session is invalid or daemon failed to start
         println!("Socket did not appear - trust session likely invalid, falling back to terminal launch");
 
-        // Delete invalid trust session
-        let home = std::env::var("HOME")
-            .map_err(|_| "Failed to get HOME directory".to_string())?;
-        let trust_session_path = PathBuf::from(home)
-            .join(".noorsigner")
-            .join("trust_session");
+        // Delete invalid trust session (platform-specific path)
+        #[cfg(unix)]
+        let trust_session_path = {
+            let home = std::env::var("HOME")
+                .map_err(|_| "Failed to get HOME directory".to_string())?;
+            PathBuf::from(home).join(".noorsigner").join("trust_session")
+        };
+
+        #[cfg(windows)]
+        let trust_session_path = {
+            let appdata = std::env::var("APPDATA")
+                .map_err(|_| "Failed to get APPDATA directory".to_string())?;
+            PathBuf::from(appdata).join("NoorSigner").join("trust_session")
+        };
 
         if trust_session_path.exists() {
             let _ = std::fs::remove_file(&trust_session_path);

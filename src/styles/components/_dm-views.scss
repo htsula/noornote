@@ -34,6 +34,26 @@
     border-bottom: 1px solid $color-2;
   }
 
+  &__warning {
+    display: flex;
+    align-items: flex-start;
+    gap: calc($gap / 2);
+    padding: $gap;
+    margin-bottom: $gap;
+    background: rgba($color-4, 0.1);
+    border: 1px solid $color-4;
+    border-radius: 8px;
+    color: $color-6;
+    font-size: 0.9rem;
+    line-height: 1.4;
+
+    svg {
+      flex-shrink: 0;
+      color: $color-4;
+      margin-top: 2px;
+    }
+  }
+
   &__compose-btn {
     display: flex;
     align-items: center;
