@@ -8,20 +8,7 @@ on:
 
 jobs:
   build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: arm64
-            rust_target: aarch64-apple-darwin
-            go_arch: arm64
-            runner: macos-14  # Apple Silicon
-          - arch: x64
-            rust_target: x86_64-apple-darwin
-            go_arch: amd64
-            runner: macos-15-large  # Intel
-
-    runs-on: ${{ matrix.runner }}
+    runs-on: macos-14  # Apple Silicon only (Intel runners require paid tier)
     steps:
       - name: Checkout NoorNote
         uses: actions/checkout@v4
@@ -41,10 +28,10 @@ jobs:
       - name: Build NoorSigner for macOS
         run: |
           cd noorsigner-src
-          GOOS=darwin GOARCH=${{ matrix.go_arch }} go build -o noorsigner-${{ matrix.rust_target }} -ldflags="-s -w" .
+          GOOS=darwin GOARCH=arm64 go build -o noorsigner-aarch64-apple-darwin -ldflags="-s -w" .
           mkdir -p ../src-tauri/binaries
-          mv noorsigner-${{ matrix.rust_target }} ../src-tauri/binaries/
-          chmod +x ../src-tauri/binaries/noorsigner-${{ matrix.rust_target }}
+          mv noorsigner-aarch64-apple-darwin ../src-tauri/binaries/
+          chmod +x ../src-tauri/binaries/noorsigner-aarch64-apple-darwin
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -72,7 +59,7 @@ jobs:
       - name: Upload .dmg
         uses: actions/upload-artifact@v4
         with:
-          name: noornote-macos-${{ matrix.arch }}-dmg
+          name: noornote-macos-arm64-dmg
           path: src-tauri/target/release/bundle/dmg/*.dmg
 
   release:
@@ -86,12 +73,6 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: noornote-macos-arm64-dmg
-          path: release/
-
-      - name: Download x64 .dmg
-        uses: actions/download-artifact@v4
-        with:
-          name: noornote-macos-x64-dmg
           path: release/
 
       - name: List release contents
