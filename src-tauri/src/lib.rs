@@ -1,6 +1,6 @@
 mod key_signer;
 
-use tauri::Emitter;
+use tauri::{Emitter, RunEvent, WindowEvent};
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutState, GlobalShortcutExt};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -81,8 +81,14 @@ pub fn run() {
       }
       Ok(())
     })
-    .run(tauri::generate_context!())
-    .expect("error while running tauri application");
+    .build(tauri::generate_context!())
+    .expect("error while building tauri application")
+    .run(|app_handle, event| {
+      if let RunEvent::WindowEvent { event: WindowEvent::CloseRequested { .. }, .. } = event {
+        // Properly exit the app when window close is requested
+        app_handle.exit(0);
+      }
+    });
 }
 
 fn register_global_shortcuts(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
