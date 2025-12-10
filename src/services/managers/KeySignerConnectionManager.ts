@@ -109,7 +109,7 @@ export class KeySignerConnectionManager {
         this.logger.info('KeySigner', 'Daemon not running, launching...');
         await this.keySigner.launchDaemon();
 
-        const maxWaitTime = 60000;
+        const maxWaitTime = 300000; // 5 minutes for first-time setup (nsec + password)
         const pollInterval = 1000;
         const startTime = Date.now();
 
@@ -128,7 +128,7 @@ export class KeySignerConnectionManager {
           this.keySigner = null;
           return {
             success: false,
-            error: 'Daemon failed to start within 60 seconds. Please try again or check Settings → Key Signer.'
+            error: 'Daemon did not start. Please complete the setup in the terminal window and try again.'
           };
         }
       }
