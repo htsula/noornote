@@ -220,34 +220,13 @@ pub async fn launch_key_signer(mode: String) -> Result<(), String> {
     // Launch in terminal for user input (password entry)
     println!("Launching in terminal for user input");
 
-    // VARIANTE A: Separate args ohne manuelle Quotes
-    println!("Trying Variante A: separate args");
-    let _ = Command::new("cmd")
-        .args(["/c", "start", "NoorSigner-A", "cmd", "/k", noorsigner_path.to_str().unwrap(), cmd])
-        .spawn();
-
-    // VARIANTE B: raw_arg
-    println!("Trying Variante B: raw_arg");
-    let raw_command = format!(r#"start "NoorSigner-B" cmd /k "{}" {}"#, noorsigner_path.display(), cmd);
-    let _ = Command::new("cmd")
+    // Use raw_arg to avoid Rust's automatic escaping which breaks cmd.exe
+    let raw_command = format!(r#"start "NoorSigner" cmd /k "{}" {}"#, noorsigner_path.display(), cmd);
+    Command::new("cmd")
         .arg("/c")
         .raw_arg(&raw_command)
-        .spawn();
-
-    // VARIANTE C: Batch-Datei
-    println!("Trying Variante C: batch file");
-    let temp_dir = std::env::temp_dir();
-    let bat_path = temp_dir.join("noorsigner_launch.bat");
-    let bat_content = format!(
-        "@echo off\r\n\"{}\" {}\r\n",
-        noorsigner_path.display(),
-        cmd
-    );
-    if std::fs::write(&bat_path, &bat_content).is_ok() {
-        let _ = Command::new("cmd")
-            .args(["/c", "start", "NoorSigner-C", "cmd", "/k", bat_path.to_str().unwrap()])
-            .spawn();
-    }
+        .spawn()
+        .map_err(|e| format!("Failed to launch terminal: {}", e))?;
 
     println!("NoorSigner launched successfully");
     Ok(())
