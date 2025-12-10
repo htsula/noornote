@@ -548,6 +548,7 @@ pub async fn launch_key_signer(mode: String) -> Result<(), String> {
         Command::new("cmd")
             .arg("/c")
             .arg("start")
+            .arg("/k")
             .arg("")  // Window title (empty)
             .arg(noorsigner_path.to_str().unwrap())
             .arg(command)
