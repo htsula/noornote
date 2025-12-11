@@ -6,9 +6,10 @@
 
 - **Timeline** - Follow your network, see latest posts, reposts, and quotes
 - **Notifications** - Likes, zaps, reposts, mentions, and replies
-- **Direct Messages** - Encrypted private conversations (NIP-04/NIP-44)
+- **Direct Messages** - Encrypted private conversations (NIP-17 + legacy NIP-04)
 - **Long-Form Articles** - Read and write NIP-23 articles with Markdown
 - **Bookmarks** - Save posts privately or publicly, organize in folders
+- **Polls** - Create and vote on NIP-88 polls
 - **Zaps** - Send and receive Lightning payments via NWC
 - **Multiple Login Methods** - Browser extension, nsec, NIP-46 remote signer, or NoorSigner
 
@@ -60,22 +61,34 @@ npm run tauri build
 
 ## NIPs Supported
 
-| NIP | Description |
-|-----|-------------|
-| NIP-01 | Basic protocol |
-| NIP-02 | Follow list |
-| NIP-04 | Encrypted DMs (legacy) |
-| NIP-05 | DNS-based verification |
-| NIP-10 | Reply threading |
-| NIP-18 | Reposts |
-| NIP-23 | Long-form content |
-| NIP-25 | Reactions |
-| NIP-27 | Text note references |
-| NIP-44 | Encrypted DMs (modern) |
-| NIP-47 | Nostr Wallet Connect |
-| NIP-51 | Lists (bookmarks, mutes) |
-| NIP-57 | Zaps |
-| NIP-65 | Relay list metadata |
+| NIP | Description | Kind(s) |
+|-----|-------------|---------|
+| NIP-01 | Basic protocol (notes, profiles) | 0, 1 |
+| NIP-02 | Follow list | 3 |
+| NIP-04 | Encrypted DMs (legacy) | 4 |
+| NIP-05 | DNS-based verification | - |
+| NIP-07 | Browser extension signing | - |
+| NIP-09 | Event deletion | 5 |
+| NIP-10 | Reply threading | - |
+| NIP-17 | Private Direct Messages | 13, 14, 1059, 10050 |
+| NIP-18 | Reposts | 6 |
+| NIP-19 | bech32 encoding (npub, nsec, note, nevent, naddr) | - |
+| NIP-23 | Long-form content (articles) | 30023 |
+| NIP-25 | Reactions | 7 |
+| NIP-27 | Text note references | - |
+| NIP-36 | Content warnings (NSFW) | - |
+| NIP-44 | Encrypted payloads (modern encryption) | - |
+| NIP-46 | Remote signing (bunker://) | 24133 |
+| NIP-47 | Nostr Wallet Connect | 23194, 23195 |
+| NIP-50 | Search | - |
+| NIP-51 | Lists (bookmarks, mutes, private follows) | 10000, 30000, 30003 |
+| NIP-56 | Reporting | 1984 |
+| NIP-57 | Zaps | 9734, 9735 |
+| NIP-65 | Relay list metadata | 10002 |
+| NIP-78 | Application-specific data | 30078 |
+| NIP-88 | Polls | 1068, 1018 |
+| NIP-96 | HTTP file storage | 24242 |
+| NIP-98 | HTTP auth | 27235 |
 
 ## Tech Stack
 
