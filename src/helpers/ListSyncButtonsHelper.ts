@@ -18,8 +18,8 @@ const MODE_CHANGED_EVENT = 'list-sync-mode:changed';
  */
 export function getListSyncMode(): ListSyncMode {
   const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored === 'easy') return 'easy';
-  return 'manual'; // default
+  if (stored === 'manual') return 'manual';
+  return 'easy'; // default for new users
 }
 
 /**
