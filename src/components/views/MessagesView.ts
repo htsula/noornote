@@ -606,10 +606,14 @@ export class MessagesView extends View {
     switch (action) {
       case 'mark-all-read':
         await this.dmService.markAllAsRead();
+        // Immediately update UI (don't wait for event)
+        await this.refreshConversationsQuiet();
         ToastService.show('All messages marked as read', 'success');
         break;
       case 'mark-all-unread':
         await this.dmService.markAllAsUnread();
+        // Immediately update UI (don't wait for event)
+        await this.refreshConversationsQuiet();
         ToastService.show('All messages marked as unread', 'success');
         break;
     }
