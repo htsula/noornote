@@ -239,14 +239,11 @@ export class ProfileView extends View {
     const headerHTML = `
       <div class="profile-header">
         ${banner ? `
-          <div class="profile-banner" style="background-image: url('${this.escapeHtml(banner)}')">
-            <div class="profile-search-mount"></div>
-          </div>
+          <div class="profile-banner" style="background-image: url('${this.escapeHtml(banner)}')"></div>
         ` : `
-          <div class="profile-banner profile-banner-fallback">
-            <div class="profile-search-mount"></div>
-          </div>
+          <div class="profile-banner profile-banner-fallback"></div>
         `}
+        <div class="profile-search-mount"></div>
 
         <div class="profile-info">
           <div class="profile-avatar-wrapper">

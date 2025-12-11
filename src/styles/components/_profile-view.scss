@@ -51,9 +51,18 @@
 
 .profile-search-mount {
   position: absolute;
-  bottom: -2rem;
+  top: 200px; // Below banner (banner height)
   right: 0;
   z-index: 100;
+  transform: translateY(calc(-100% - 0.5rem)); // Position above the banner bottom edge
+
+  @include tablet-down {
+    top: 150px;
+  }
+
+  @include mobile-down {
+    top: 120px;
+  }
 }
 
 .profile-banner-fallback {
