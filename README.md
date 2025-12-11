@@ -25,6 +25,7 @@
 - **Thread mention alerts** - Get notified when someone replies to a note you were mentioned in
 - **Local list backups** - Manual NIP-51 list management, never lose your follows, bookmarks, or mutes again
 - **Multiple NIP-05 support** - Add multiple verified addresses to your profile
+- **Safe NWC storage** - Stored in keychain (macOS), Secret Service (Linux), or Credential Manager (Windows)
 
 ...and many more to come.
 
