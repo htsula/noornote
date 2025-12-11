@@ -1,6 +1,5 @@
 /**
  * MediaUploadService
- * Modern implementation using fetch() + AbortController
  *
  * Features:
  * - Blossom (BUD-02) and NIP-96 support
@@ -8,11 +7,13 @@
  * - Proper cancellation with AbortController
  * - Clean error handling
  * - Progress tracking
+ * - Platform-specific upload adapters (Windows uses Tauri HTTP, Mac/Linux uses XHR)
  */
 
 import { AuthService } from './AuthService';
 import { ErrorService } from './ErrorService';
 import { ToastService } from './ToastService';
+import { createMediaUploadAdapter, type MediaUploadAdapter } from './media';
 
 interface MediaServerSettings {
   url: string;
@@ -31,7 +32,7 @@ export class MediaUploadService {
   private static instance: MediaUploadService;
   private authService: AuthService;
   private mediaServerStorageKey = 'noornote_media_server';
-  private abortController: AbortController | null = null;
+  private uploadAdapter: MediaUploadAdapter;
 
   // File size limits
   private readonly MAX_FILE_SIZE_FREE = 10 * 1024 * 1024; // 10 MB
@@ -39,6 +40,7 @@ export class MediaUploadService {
 
   private constructor() {
     this.authService = AuthService.getInstance();
+    this.uploadAdapter = createMediaUploadAdapter();
   }
 
   public static getInstance(): MediaUploadService {
@@ -174,118 +176,52 @@ export class MediaUploadService {
     serverUrl: string,
     onProgress?: ProgressCallback
   ): Promise<UploadResult> {
-    return new Promise((resolve, reject) => {
-      // Pseudo-progress timer (simulates upload progress)
-      let pseudoProgress = 1;
-      let pseudoTimer: number | undefined;
-
-      const startPseudoProgress = () => {
-        if (pseudoTimer !== undefined) return;
-        pseudoTimer = window.setInterval(() => {
-          pseudoProgress = Math.min(pseudoProgress + 3, 90);
-          onProgress?.(pseudoProgress);
-          if (pseudoProgress >= 90) {
-            stopPseudoProgress();
-          }
-        }, 300);
-      };
-
-      const stopPseudoProgress = () => {
-        if (pseudoTimer !== undefined) {
-          clearInterval(pseudoTimer);
-          pseudoTimer = undefined;
-        }
-      };
-
+    try {
       // Calculate hash first
-      this.calculateSHA256(file)
-        .then(sha256 => {
-          onProgress?.(10);
-          return this.createBlossomAuth(sha256).then(authHeader => ({ sha256, authHeader }));
-        })
-        .then(({ authHeader }) => {
-          onProgress?.(20);
+      onProgress?.(5);
+      const sha256 = await this.calculateSHA256(file);
 
-          const xhr = new XMLHttpRequest();
-          this.abortController = new AbortController();
+      // Create auth
+      onProgress?.(15);
+      const authHeader = await this.createBlossomAuth(sha256);
 
-          // Add 60 second timeout
-          const uploadTimeout = setTimeout(() => {
-            xhr.abort();
-            stopPseudoProgress();
-            reject(new Error('Upload timeout - please try again'));
-          }, 60000);
+      // Upload using platform-specific adapter
+      onProgress?.(20);
+      const response = await this.uploadAdapter.upload({
+        url: `${serverUrl}/upload`,
+        method: 'PUT',
+        headers: {
+          'Authorization': authHeader,
+          'Content-Type': file.type || 'application/octet-stream'
+        },
+        body: file,
+        onProgress: (percent) => {
+          // Map adapter progress (0-100) to our range (20-90)
+          const mappedProgress = 20 + Math.round(percent * 0.7);
+          onProgress?.(mappedProgress);
+        }
+      });
 
-          // Track upload progress
-          xhr.upload.onprogress = (event) => {
-            if (event.lengthComputable) {
-              stopPseudoProgress();
-              const percent = Math.round((event.loaded / event.total) * 100);
-              const mappedProgress = 20 + Math.round(percent * 0.7); // Map to 20-90%
-              onProgress?.(mappedProgress);
-            }
-          };
-
-          xhr.onload = () => {
-            clearTimeout(uploadTimeout);
-            stopPseudoProgress();
-            if (xhr.status >= 200 && xhr.status < 300) {
-              try {
-                const descriptor = JSON.parse(xhr.responseText);
-                onProgress?.(100);
-                resolve({
-                  success: true,
-                  url: descriptor.url
-                });
-              } catch (_error) {
-                reject(new Error('Failed to parse response'));
-              }
-            } else {
-              reject(new Error(`Upload failed: ${xhr.status} ${xhr.statusText}`));
-            }
-            this.abortController = null;
-          };
-
-          xhr.onerror = () => {
-            clearTimeout(uploadTimeout);
-            stopPseudoProgress();
-            this.abortController = null;
-            reject(new Error('Network error'));
-          };
-
-          xhr.onabort = () => {
-            clearTimeout(uploadTimeout);
-            stopPseudoProgress();
-            this.abortController = null;
-            reject(new Error('Upload cancelled'));
-          };
-
-          // Handle abort signal
-          this.abortController.signal.addEventListener('abort', () => {
-            xhr.abort();
-          });
-
-          xhr.open('PUT', `${serverUrl}/upload`);
-          xhr.setRequestHeader('Authorization', authHeader);
-          xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
-
-          startPseudoProgress();
-          xhr.send(file);
-        })
-        .catch((_error) => {
-          stopPseudoProgress();
-          this.abortController = null;
-          reject(_error);
-        });
-    })
-      .then(result => result as UploadResult)
-      .catch((_error: any) => {
-        console.error('Blossom upload error:', _error);
+      if (response.ok) {
+        const descriptor = await response.json();
+        onProgress?.(100);
+        return {
+          success: true,
+          url: descriptor.url
+        };
+      } else {
         return {
           success: false,
-          error: `Upload error: ${_error.message || _error}`
+          error: `Upload failed: ${response.status} ${response.statusText}`
         };
-      });
+      }
+    } catch (error) {
+      console.error('Blossom upload error:', error);
+      return {
+        success: false,
+        error: `Upload error: ${error instanceof Error ? error.message : error}`
+      };
+    }
   }
 
   /**
@@ -303,6 +239,41 @@ export class MediaUploadService {
   }
 
   /**
+   * Build multipart form data manually for Tauri HTTP compatibility
+   */
+  private async buildMultipartBody(file: File, fields: Record<string, string>): Promise<{ body: ArrayBuffer; boundary: string }> {
+    const boundary = '----WebKitFormBoundary' + Math.random().toString(36).substring(2);
+    const encoder = new TextEncoder();
+    const parts: Uint8Array[] = [];
+
+    // Add text fields
+    for (const [key, value] of Object.entries(fields)) {
+      const fieldPart = `--${boundary}\r\nContent-Disposition: form-data; name="${key}"\r\n\r\n${value}\r\n`;
+      parts.push(encoder.encode(fieldPart));
+    }
+
+    // Add file field
+    const fileHeader = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${file.name}"\r\nContent-Type: ${file.type || 'application/octet-stream'}\r\n\r\n`;
+    parts.push(encoder.encode(fileHeader));
+    parts.push(new Uint8Array(await file.arrayBuffer()));
+    parts.push(encoder.encode('\r\n'));
+
+    // End boundary
+    parts.push(encoder.encode(`--${boundary}--\r\n`));
+
+    // Combine all parts
+    const totalLength = parts.reduce((sum, part) => sum + part.length, 0);
+    const body = new Uint8Array(totalLength);
+    let offset = 0;
+    for (const part of parts) {
+      body.set(part, offset);
+      offset += part.length;
+    }
+
+    return { body: body.buffer, boundary };
+  }
+
+  /**
    * Upload file using NIP-96 protocol
    */
   private async uploadNIP96(
@@ -310,136 +281,72 @@ export class MediaUploadService {
     serverUrl: string,
     onProgress?: ProgressCallback
   ): Promise<UploadResult> {
-    return new Promise(async (resolve, reject) => {
-      // Pseudo-progress timer (simulates upload progress)
-      let pseudoProgress = 1;
-      let pseudoTimer: number | undefined;
+    try {
+      // Fetch config
+      onProgress?.(5);
+      const config = await this.fetchNIP96Config(serverUrl);
+      const apiUrl = config?.api_url || `${serverUrl}/upload`;
 
-      const startPseudoProgress = () => {
-        if (pseudoTimer !== undefined) return;
-        pseudoTimer = window.setInterval(() => {
-          pseudoProgress = Math.min(pseudoProgress + 3, 90);
-          onProgress?.(pseudoProgress);
-          if (pseudoProgress >= 90) {
-            stopPseudoProgress();
-          }
-        }, 300);
-      };
+      // Calculate hash
+      onProgress?.(10);
+      const sha256 = await this.calculateSHA256(file);
 
-      const stopPseudoProgress = () => {
-        if (pseudoTimer !== undefined) {
-          clearInterval(pseudoTimer);
-          pseudoTimer = undefined;
+      // Create auth
+      onProgress?.(15);
+      const authHeader = await this.createNIP98Auth('POST', apiUrl, sha256);
+
+      // Build multipart body (compatible with both XHR and Tauri HTTP)
+      onProgress?.(20);
+      const { body, boundary } = await this.buildMultipartBody(file, {
+        content_type: file.type,
+        size: file.size.toString()
+      });
+
+      // Upload using platform-specific adapter
+      const response = await this.uploadAdapter.upload({
+        url: apiUrl,
+        method: 'POST',
+        headers: {
+          'Authorization': authHeader,
+          'Content-Type': `multipart/form-data; boundary=${boundary}`
+        },
+        body: body,
+        onProgress: (percent) => {
+          // Map adapter progress (0-100) to our range (20-90)
+          const mappedProgress = 20 + Math.round(percent * 0.7);
+          onProgress?.(mappedProgress);
         }
-      };
+      });
 
-      try {
-        // Fetch config
-        onProgress?.(5);
-        const config = await this.fetchNIP96Config(serverUrl);
-        const apiUrl = config?.api_url || `${serverUrl}/upload`;
-
-        // Calculate hash
-        onProgress?.(10);
-        const sha256 = await this.calculateSHA256(file);
-
-        // Create auth
-        onProgress?.(20);
-        const authHeader = await this.createNIP98Auth('POST', apiUrl, sha256);
-
-        // Prepare form data
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('content_type', file.type);
-        formData.append('size', file.size.toString());
-
-        // Upload with XHR
-        const xhr = new XMLHttpRequest();
-        this.abortController = new AbortController();
-
-        // Add 60 second timeout
-        const uploadTimeout = setTimeout(() => {
-          xhr.abort();
-          stopPseudoProgress();
-          reject(new Error('Upload timeout - please try again'));
-        }, 60000);
-
-        xhr.upload.onprogress = (event) => {
-          if (event.lengthComputable) {
-            stopPseudoProgress();
-            const percent = Math.round((event.loaded / event.total) * 100);
-            const mappedProgress = 20 + Math.round(percent * 0.7); // Map to 20-90%
-            onProgress?.(mappedProgress);
+      if (response.ok) {
+        const result = await response.json();
+        if (result.status === 'success' && result.nip94_event) {
+          const urlTag = result.nip94_event.tags.find((t: string[]) => t[0] === 'url');
+          if (urlTag) {
+            onProgress?.(100);
+            return {
+              success: true,
+              url: urlTag[1]
+            };
           }
-        };
-
-        xhr.onload = () => {
-          clearTimeout(uploadTimeout);
-          stopPseudoProgress();
-          if (xhr.status >= 200 && xhr.status < 300) {
-            try {
-              const result = JSON.parse(xhr.responseText);
-              if (result.status === 'success' && result.nip94_event) {
-                const urlTag = result.nip94_event.tags.find((t: string[]) => t[0] === 'url');
-                if (urlTag) {
-                  onProgress?.(100);
-                  resolve({
-                    success: true,
-                    url: urlTag[1]
-                  });
-                } else {
-                  reject(new Error('No URL in upload response'));
-                }
-              } else {
-                reject(new Error('No URL in upload response'));
-              }
-            } catch (_error) {
-              reject(new Error('Failed to parse response'));
-            }
-          } else {
-            reject(new Error(`Upload failed: ${xhr.status} ${xhr.statusText}`));
-          }
-          this.abortController = null;
-        };
-
-        xhr.onerror = () => {
-          clearTimeout(uploadTimeout);
-          stopPseudoProgress();
-          this.abortController = null;
-          reject(new Error('Network error'));
-        };
-
-        xhr.onabort = () => {
-          clearTimeout(uploadTimeout);
-          stopPseudoProgress();
-          this.abortController = null;
-          reject(new Error('Upload cancelled'));
-        };
-
-        // Handle abort signal
-        this.abortController.signal.addEventListener('abort', () => {
-          xhr.abort();
-        });
-
-        xhr.open('POST', apiUrl);
-        xhr.setRequestHeader('Authorization', authHeader);
-
-        startPseudoProgress();
-        xhr.send(formData);
-      } catch (_error) {
-        stopPseudoProgress();
-        this.abortController = null;
-        reject(_error);
-      }
-    })
-      .then(result => result as UploadResult)
-      .catch((_error: any) => {
-        console.error('NIP-96 upload error:', _error);
+        }
         return {
           success: false,
-          error: `Upload error: ${_error.message || _error}`
+          error: 'No URL in upload response'
         };
-      });
+      } else {
+        return {
+          success: false,
+          error: `Upload failed: ${response.status} ${response.statusText}`
+        };
+      }
+    } catch (error) {
+      console.error('NIP-96 upload error:', error);
+      return {
+        success: false,
+        error: `Upload error: ${error instanceof Error ? error.message : error}`
+      };
+    }
   }
 
   /**
@@ -521,9 +428,6 @@ export class MediaUploadService {
    * Cancel ongoing upload
    */
   public cancelUpload(): void {
-    if (this.abortController) {
-      this.abortController.abort();
-      this.abortController = null;
-    }
+    this.uploadAdapter.abort();
   }
 }

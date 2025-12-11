@@ -51,7 +51,7 @@ If the app crashes, check the log files:
 |--------|--------------|
 | Linux | `~/.local/share/com.noornote.app/logs/` |
 | macOS | `~/Library/Logs/com.noornote.app/` |
-| Windows | `%LOCALAPPDATA%\com.noornote.app\logs\` |
+| Windows | `%LOCALAPPDATA%\com.noornote.desktop\logs\` |
 
 ## Login Options
 
