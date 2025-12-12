@@ -50,6 +50,20 @@ jobs:
       - name: Build Tauri App (dmg only)
         run: npm run tauri build -- --bundles dmg
 
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Rename build outputs for consistency
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+
+          # Rename .dmg
+          DMG_FILE=$(find src-tauri/target/release/bundle/dmg -name "*.dmg" | head -1)
+          if [ -n "$DMG_FILE" ]; then
+            mv "$DMG_FILE" "src-tauri/target/release/bundle/dmg/noornote-${VERSION}-macos-aarch64.dmg"
+          fi
+
       - name: List build outputs
         run: |
           echo "=== .dmg files ==="

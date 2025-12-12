@@ -100,6 +100,35 @@ jobs:
           echo "Created: ${TARBALL_DIR}.tar.gz"
           ls -lh "${TARBALL_DIR}.tar.gz"
 
+      - name: Rename build outputs for consistency
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          ARCH=${{ matrix.arch }}
+
+          # Rename .deb
+          DEB_FILE=$(find src-tauri/target/release/bundle/deb -name "*.deb" | head -1)
+          if [ -n "$DEB_FILE" ]; then
+            mv "$DEB_FILE" "src-tauri/target/release/bundle/deb/noornote-${VERSION}-linux-${ARCH}.deb"
+          fi
+
+          # Rename .rpm (map arch names)
+          RPM_FILE=$(find src-tauri/target/release/bundle/rpm -name "*.rpm" | head -1)
+          if [ -n "$RPM_FILE" ]; then
+            # Use x86_64 for amd64, aarch64 for arm64 in rpm naming
+            if [ "$ARCH" = "amd64" ]; then
+              RPM_ARCH="x86_64"
+            else
+              RPM_ARCH="aarch64"
+            fi
+            mv "$RPM_FILE" "src-tauri/target/release/bundle/rpm/noornote-${VERSION}-linux-${RPM_ARCH}.rpm"
+          fi
+
+          # Rename tarball (already correctly named but ensure lowercase)
+          TARBALL=$(ls -1 *.tar.gz 2>/dev/null | head -1)
+          if [ -n "$TARBALL" ]; then
+            mv "$TARBALL" "noornote-${VERSION}-linux-${ARCH}.tar.gz"
+          fi
+
       - name: List build outputs
         run: |
           echo "=== .deb files ==="
