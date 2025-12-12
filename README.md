@@ -35,6 +35,14 @@
 
 Available for macOS and Linux: [Releases](https://github.com/77elements/noornote/releases)
 
+### macOS Note
+
+Since the app is not signed, macOS will show an error ("app is damaged"). Run this in Terminal after installation:
+
+```bash
+xattr -cr /Applications/Noornote.app
+```
+
 ## Screenshot
 
 ![NoorNote Timeline](https://image.nostr.build/0e3e21226b4e9970197fde002da17f4f60cdbf896eacb5f73839ee61cd3797e6.jpg)

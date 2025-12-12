@@ -33,7 +33,13 @@ bash <(curl -s https://raw.githubusercontent.com/77elements/noornote/main/deploy
 
 ## macOS
 
-Kommt bald.
+1. Download `.dmg` from the [Release page](https://github.com/77elements/noornote/releases)
+2. Open DMG and drag `Noornote.app` to `/Applications`
+3. **Important:** Since the app is not signed, macOS will show an error. Run in Terminal:
+   ```bash
+   xattr -cr /Applications/Noornote.app
+   ```
+4. Now the app can be opened normally
 
 ---
 
