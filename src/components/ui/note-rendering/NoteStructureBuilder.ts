@@ -15,6 +15,7 @@ import { Router } from '../../../services/Router';
 import { replaceMediaPlaceholders } from '../../../helpers/renderMediaContent';
 import { extractOriginalNoteId } from '../../../helpers/extractOriginalNoteId';
 import { getImageClickHandler } from '../../../services/ImageClickHandler';
+import { getVideoPlayerService } from '../../../services/VideoPlayerService';
 import { UserHoverCard } from '../UserHoverCard';
 
 // Store component instances for cleanup
@@ -160,6 +161,10 @@ export class NoteStructureBuilder {
     // Initialize image click handlers for full-screen viewer
     const imageClickHandler = getImageClickHandler();
     imageClickHandler.initializeForContainer(noteDiv);
+
+    // Initialize Plyr video players
+    const videoPlayerService = getVideoPlayerService();
+    videoPlayerService.initializeForContainer(noteDiv);
 
     // Initialize user hover card for all mention links
     const userHoverCard = UserHoverCard.getInstance();
