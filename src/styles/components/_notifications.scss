@@ -44,19 +44,11 @@
   font-style: italic;
 }
 
-// NotificationItem Component
+// NotificationItem Component (extends .ui-list__item)
 .notification-item {
   display: grid;
   grid-template-columns: auto 1fr;
   gap: $gap;
-  padding: $gap;
-  border-bottom: 1px solid $color-2;
-  cursor: pointer;
-  transition: background 0.2s ease;
-
-  &:hover {
-    background: rgba($color-2, 0.5);
-  }
 
   &:active {
     transform: scale(0.99);

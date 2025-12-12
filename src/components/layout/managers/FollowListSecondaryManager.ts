@@ -607,7 +607,7 @@ export class FollowListSecondaryManager extends BaseListSecondaryManager<FollowI
       const zapBadgeHtml = this.renderZapBadge(item.pubkey);
 
       const followItemDiv = document.createElement('div');
-      followItemDiv.className = 'follow-item';
+      followItemDiv.className = 'ui-list__item follow-item';
       followItemDiv.dataset.pubkey = item.pubkey;
       followItemDiv.innerHTML = `
         <div class="follow-item__content-wrapper">
@@ -737,7 +737,7 @@ export class FollowListSecondaryManager extends BaseListSecondaryManager<FollowI
       const zapBadgeHtml = this.renderZapBadge(item.pubkey);
 
       const followItemDiv = document.createElement('div');
-      followItemDiv.className = 'follow-item';
+      followItemDiv.className = 'ui-list__item follow-item';
       followItemDiv.dataset.pubkey = item.pubkey;
       followItemDiv.innerHTML = `
         <div class="follow-item__content-wrapper">

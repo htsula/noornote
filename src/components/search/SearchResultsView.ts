@@ -135,7 +135,7 @@ export class SearchResultsView {
    */
   private createResultItem(note: NostrEvent, searchTerms: string): HTMLElement {
     const item = document.createElement('div');
-    item.className = 'search-results__item';
+    item.className = 'ui-list__item ui-list__item--clickable search-results__item';
     item.dataset.noteId = note.id;
 
     const date = formatTimestamp(note.created_at);

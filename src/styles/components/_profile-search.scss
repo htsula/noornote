@@ -170,20 +170,9 @@
   &__list {
     display: flex;
     flex-direction: column;
-    gap: $gap;
   }
 
-  &__item {
-    background: $color-2;
-    border: 1px solid $color-3;
-    border-radius: 8px;
-    padding: $gap;
-    transition: border-color 0.2s ease;
-
-    &:hover {
-      border-color: $color-4;
-    }
-  }
+  // Item extends .ui-list__item - styles inherited
 
   &__date {
     font-size: 12px;

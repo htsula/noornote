@@ -256,7 +256,7 @@ export class MuteListSecondaryManager extends BaseListSecondaryManager<string, M
       const avatarUrl = item.profile?.picture || '';
 
       const muteItemDiv = document.createElement('div');
-      muteItemDiv.className = 'mute-item';
+      muteItemDiv.className = 'ui-list__item mute-item';
       muteItemDiv.dataset.pubkey = item.pubkey;
       muteItemDiv.innerHTML = `
         <div class="mute-item__content-wrapper">
@@ -309,7 +309,7 @@ export class MuteListSecondaryManager extends BaseListSecondaryManager<string, M
         : 'Content unavailable';
 
       const threadDiv = document.createElement('div');
-      threadDiv.className = 'mute-item mute-item--thread';
+      threadDiv.className = 'ui-list__item mute-item mute-item--thread';
       threadDiv.dataset.eventId = thread.eventId;
       threadDiv.innerHTML = `
         <div class="mute-item__content-wrapper">

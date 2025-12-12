@@ -438,10 +438,10 @@ export class MessagesView extends View {
    */
   private async renderConversationItem(conversation: DMConversation): Promise<HTMLElement> {
     const item = document.createElement('div');
-    item.className = 'conversation-item';
+    item.className = 'ui-list__item ui-list__item--clickable conversation-item';
     item.dataset.pubkey = conversation.pubkey;
     if (conversation.unreadCount > 0) {
-      item.classList.add('conversation-item--unread');
+      item.classList.add('ui-list__item--unread', 'conversation-item--unread');
     }
 
     // Fetch profile info (with fallback)

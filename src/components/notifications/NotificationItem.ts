@@ -50,7 +50,7 @@ export class NotificationItem {
    */
   private createElement(): HTMLElement {
     const item = document.createElement('div');
-    item.className = 'notification-item';
+    item.className = 'ui-list__item ui-list__item--clickable notification-item';
     item.dataset.type = this.options.type; // For CSS styling
     item.addEventListener('click', (e) => this.handleClick(e));
 
