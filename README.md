@@ -35,9 +35,9 @@
 
 Available for macOS and Linux: [Releases](https://github.com/77elements/noornote/releases)
 
-## Screenshots
+## Screenshot
 
-*Coming soon*
+![NoorNote Timeline](https://image.nostr.build/0e3e21226b4e9970197fde002da17f4f60cdbf896eacb5f73839ee61cd3797e6.jpg)
 
 ## Privacy & Security
 
