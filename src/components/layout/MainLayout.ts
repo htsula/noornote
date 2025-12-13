@@ -70,6 +70,7 @@ export class MainLayout {
     this.setupKeyboardShortcuts();
     this.setupSpacebarScroll();
     this.initializeGlobalSearchView();
+    this.setupActiveNavigation();
   }
 
   /**
@@ -182,6 +183,63 @@ export class MainLayout {
     const secondaryContent = this.element.querySelector('.secondary-content-body');
     if (secondaryContent) {
       secondaryContent.appendChild(this.globalSearchView.getElement());
+    }
+  }
+
+  /**
+   * Setup active navigation highlighting
+   */
+  private setupActiveNavigation(): void {
+    // Update on route changes
+    window.addEventListener('router:view-changed', ((e: CustomEvent) => {
+      this.updateActiveNavigation(e.detail?.view || '');
+    }) as EventListener);
+
+    // Set Timeline as active by default (it's the default route)
+    // Will be updated by router:view-changed event when navigating
+    const homeLink = this.element.querySelector('.primary-nav .home-link');
+    homeLink?.classList.add('is-active');
+  }
+
+  /**
+   * Update active navigation based on view class (e.g., 'tv', 'pv', 'nv')
+   */
+  private updateActiveNavigation(viewClass: string): void {
+    // Clear all active states (main nav only, not sublinks)
+    const navLinks = this.element.querySelectorAll('.primary-nav > li > a');
+    navLinks.forEach(link => link.classList.remove('is-active'));
+
+    // Map viewClass abbreviations to nav selectors
+    const viewToSelector: Record<string, string> = {
+      'tv': '.home-link',           // Timeline View
+      'pv': '.profile-link',        // Profile View
+      'nv': '.notifications-link',  // Notifications View
+      'atv': 'a[href="/articles"]', // Articles Timeline View
+      'av': 'a[href="/articles"]',  // Article View (single)
+      'aev': 'a[href="/articles"]', // Article Editor View
+      'mv': 'a[href="/messages"]',  // Messages View
+      'cv': 'a[href="/messages"]',  // Conversation View
+      'sv': 'a[href="/settings"]'   // Settings View
+    };
+
+    const selector = viewToSelector[viewClass];
+    if (selector) {
+      const activeLink = this.element.querySelector(`.primary-nav ${selector}`);
+      activeLink?.classList.add('is-active');
+    }
+  }
+
+  /**
+   * Set active state on a list sublink
+   */
+  private setActiveListSublink(listType: ListType | null): void {
+    // Clear all list sublinks
+    const sublinks = this.element.querySelectorAll('.primary-nav__sublink');
+    sublinks.forEach(link => link.classList.remove('is-active'));
+
+    if (listType) {
+      const activeSublink = this.element.querySelector(`.primary-nav__sublink[data-list-type="${listType}"]`);
+      activeSublink?.classList.add('is-active');
     }
   }
 
@@ -962,8 +1020,14 @@ export class MainLayout {
    * Replaces any existing list tab
    */
   public openListTab(listType: ListType): void {
-    // Close existing list tab if any
-    this.closeListTab();
+    // Close existing list tab if any (without clearing active state yet)
+    if (this.currentListView) {
+      this.currentListView.destroy();
+      this.currentListView = null;
+    }
+
+    // Set active state on list sublink
+    this.setActiveListSublink(listType);
 
     // Map list types to titles
     const titles: Record<ListType, string> = {
@@ -1036,6 +1100,9 @@ export class MainLayout {
     if (this.currentListView) {
       this.currentListView.destroy();
       this.currentListView = null;
+
+      // Clear active state on list sublinks
+      this.setActiveListSublink(null);
 
       // Activate System Logs tab (scoped to secondary-content only)
       const secondaryContent = this.element.querySelector('.secondary-content') as HTMLElement;

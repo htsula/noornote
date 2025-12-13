@@ -152,7 +152,8 @@
       height: 20px;
     }
 
-    &:hover {
+    &:hover,
+    &.is-active {
       background: rgba($color-4, 0.1);
       color: $color-4;
     }
@@ -266,7 +267,8 @@
       margin-right: calc($gap / 2);
     }
 
-    &:hover {
+    &:hover,
+    &.is-active {
       background: rgba($color-4, 0.1);
       color: $color-4;
     }
