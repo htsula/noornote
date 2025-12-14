@@ -49,20 +49,17 @@ export interface DMConversation {
   subject?: string;
 }
 
-const DB_NAME = 'noornote_dm';
+const DB_NAME_PREFIX = 'noornote_dm_';
 const DB_VERSION = 3; // Bumped for lastReadAt field
 const MESSAGES_STORE = 'messages';
 const CONVERSATIONS_STORE = 'conversations';
-const METADATA_STORE = 'metadata';
-
-// Metadata keys
-const META_USER_PUBKEY = 'userPubkey';
 
 export class DMStore {
   private static instance: DMStore;
   private db: IDBDatabase | null = null;
   private systemLogger: SystemLogger;
   private initPromise: Promise<void> | null = null;
+  private currentUserPubkey: string | null = null;
 
   private constructor() {
     this.systemLogger = SystemLogger.getInstance();
@@ -76,14 +73,34 @@ export class DMStore {
   }
 
   /**
-   * Initialize IndexedDB (lazy, called on first access)
+   * Initialize IndexedDB for a specific user (per-user database)
+   * @param userPubkey The user's pubkey to create/open database for
    */
-  public async init(): Promise<void> {
+  public async init(userPubkey?: string): Promise<void> {
+    // If pubkey provided and different from current, close existing DB and reinit
+    if (userPubkey && this.currentUserPubkey !== userPubkey) {
+      if (this.db) {
+        this.db.close();
+        this.db = null;
+      }
+      this.initPromise = null;
+      this.currentUserPubkey = userPubkey;
+    }
+
+    // If no pubkey provided and we have a current one, use it
+    const pubkey = userPubkey || this.currentUserPubkey;
+    if (!pubkey) {
+      this.systemLogger.warn('DMStore', 'init() called without pubkey and no current user');
+      return;
+    }
+
     if (this.db) return;
     if (this.initPromise) return this.initPromise;
 
+    const dbName = DB_NAME_PREFIX + pubkey;
+
     this.initPromise = new Promise((resolve, reject) => {
-      const request = indexedDB.open(DB_NAME, DB_VERSION);
+      const request = indexedDB.open(dbName, DB_VERSION);
 
       request.onerror = () => {
         this.systemLogger.error('DMStore', 'Failed to open IndexedDB:', request.error);
@@ -92,7 +109,7 @@ export class DMStore {
 
       request.onsuccess = () => {
         this.db = request.result;
-        this.systemLogger.info('DMStore', 'IndexedDB initialized');
+        this.systemLogger.info('DMStore', `IndexedDB initialized for user ${pubkey.slice(0, 8)}...`);
         resolve();
       };
 
@@ -113,11 +130,6 @@ export class DMStore {
           conversationsStore.createIndex('lastMessageAt', 'lastMessageAt', { unique: false });
         }
 
-        // Metadata store (for user pubkey tracking)
-        if (!db.objectStoreNames.contains(METADATA_STORE)) {
-          db.createObjectStore(METADATA_STORE, { keyPath: 'key' });
-        }
-
         this.systemLogger.info('DMStore', 'IndexedDB schema created/upgraded');
       };
     });
@@ -126,38 +138,21 @@ export class DMStore {
   }
 
   /**
-   * Get stored user pubkey (to detect user change on app restart)
+   * Get stored user pubkey (for compatibility - returns current user)
+   * @deprecated Use init(pubkey) instead
    */
   public async getStoredUserPubkey(): Promise<string | null> {
-    await this.init();
-
-    return new Promise((resolve, reject) => {
-      const tx = this.db!.transaction(METADATA_STORE, 'readonly');
-      const store = tx.objectStore(METADATA_STORE);
-      const request = store.get(META_USER_PUBKEY);
-
-      request.onsuccess = () => {
-        const result = request.result;
-        resolve(result?.value || null);
-      };
-      request.onerror = () => reject(request.error);
-    });
+    return this.currentUserPubkey;
   }
 
   /**
-   * Set stored user pubkey
+   * Set stored user pubkey (for compatibility - triggers DB switch)
+   * @deprecated Use init(pubkey) instead
    */
   public async setStoredUserPubkey(pubkey: string): Promise<void> {
-    await this.init();
-
-    return new Promise((resolve, reject) => {
-      const tx = this.db!.transaction(METADATA_STORE, 'readwrite');
-      const store = tx.objectStore(METADATA_STORE);
-      store.put({ key: META_USER_PUBKEY, value: pubkey });
-
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
+    if (this.currentUserPubkey !== pubkey) {
+      await this.init(pubkey);
+    }
   }
 
   /**
@@ -464,16 +459,16 @@ export class DMStore {
   }
 
   /**
-   * Clear all DM data (for logout) - preserves metadata
+   * Clear all DM data for current user
+   * Note: With per-user DBs, this is rarely needed - just close the DB on logout
    */
   public async clear(): Promise<void> {
-    await this.init();
+    if (!this.db) return;
 
     return new Promise((resolve, reject) => {
-      const tx = this.db!.transaction([MESSAGES_STORE, CONVERSATIONS_STORE, METADATA_STORE], 'readwrite');
+      const tx = this.db!.transaction([MESSAGES_STORE, CONVERSATIONS_STORE], 'readwrite');
       tx.objectStore(MESSAGES_STORE).clear();
       tx.objectStore(CONVERSATIONS_STORE).clear();
-      tx.objectStore(METADATA_STORE).clear();
 
       tx.oncomplete = () => {
         this.systemLogger.info('DMStore', 'All DM data cleared');
@@ -481,5 +476,19 @@ export class DMStore {
       };
       tx.onerror = () => reject(tx.error);
     });
+  }
+
+  /**
+   * Close database connection (called on logout)
+   * Does NOT delete data - just closes connection
+   */
+  public close(): void {
+    if (this.db) {
+      this.db.close();
+      this.db = null;
+    }
+    this.initPromise = null;
+    this.currentUserPubkey = null;
+    this.systemLogger.info('DMStore', 'Database connection closed');
   }
 }

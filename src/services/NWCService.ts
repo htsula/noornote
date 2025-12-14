@@ -2,6 +2,10 @@
  * NWCService - Nostr Wallet Connect Service
  * Handles NWC connection and Lightning invoice payments (NIP-47)
  *
+ * Architecture: Per-user state via Maps (no clearing/overwriting on account switch)
+ * - connections: Map<pubkey, NWCConnection>
+ * - states: Map<pubkey, NWCConnectionState>
+ *
  * NIP-47: https://github.com/nostr-protocol/nips/blob/master/47.md
  */
 
@@ -12,6 +16,7 @@ import { SystemLogger } from '../components/system/SystemLogger';
 import { ErrorService } from './ErrorService';
 import { ToastService } from './ToastService';
 import { KeychainStorage } from './KeychainStorage';
+import { AuthService } from './AuthService';
 
 export type NWCConnectionState = 'disconnected' | 'connecting' | 'connected' | 'error';
 
@@ -32,15 +37,17 @@ export class NWCService {
   private static instance: NWCService;
   private systemLogger: SystemLogger;
   private transport: NostrTransport;
-  private connection: NWCConnection | null = null;
-  private state: NWCConnectionState = 'disconnected';
+
+  // Per-user state - NO clearing needed on account switch
+  private connections: Map<string, NWCConnection> = new Map();
+  private states: Map<string, NWCConnectionState> = new Map();
 
   private constructor() {
     this.systemLogger = SystemLogger.getInstance();
     this.transport = NostrTransport.getInstance();
 
-    // Try to restore connection from KeychainStorage (async, runs in background)
-    this.restoreConnection();
+    // Restore connection for current user (if any)
+    this.restoreConnectionForCurrentUser();
   }
 
   public static getInstance(): NWCService {
@@ -48,6 +55,55 @@ export class NWCService {
       NWCService.instance = new NWCService();
     }
     return NWCService.instance;
+  }
+
+  /**
+   * Get current user's pubkey
+   */
+  private getCurrentUserPubkey(): string | null {
+    const user = AuthService.getInstance().getCurrentUser();
+    return user?.pubkey || null;
+  }
+
+  /**
+   * Get connection for current user
+   */
+  private getConnectionForCurrentUser(): NWCConnection | null {
+    const pubkey = this.getCurrentUserPubkey();
+    if (!pubkey) return null;
+    return this.connections.get(pubkey) || null;
+  }
+
+  /**
+   * Get state for current user
+   */
+  private getStateForCurrentUser(): NWCConnectionState {
+    const pubkey = this.getCurrentUserPubkey();
+    if (!pubkey) return 'disconnected';
+    return this.states.get(pubkey) || 'disconnected';
+  }
+
+  /**
+   * Set connection for current user
+   */
+  private setConnectionForCurrentUser(connection: NWCConnection | null): void {
+    const pubkey = this.getCurrentUserPubkey();
+    if (!pubkey) return;
+
+    if (connection) {
+      this.connections.set(pubkey, connection);
+    } else {
+      this.connections.delete(pubkey);
+    }
+  }
+
+  /**
+   * Set state for current user
+   */
+  private setStateForCurrentUser(state: NWCConnectionState): void {
+    const pubkey = this.getCurrentUserPubkey();
+    if (!pubkey) return;
+    this.states.set(pubkey, state);
   }
 
   /**
@@ -98,7 +154,7 @@ export class NWCService {
    * Connect to NWC wallet
    */
   public async connect(connectionString: string): Promise<boolean> {
-    this.state = 'connecting';
+    this.setStateForCurrentUser('connecting');
 
     try {
       // Parse connection string
@@ -108,16 +164,16 @@ export class NWCService {
       const isValid = await this.testConnection(connection);
 
       if (!isValid) {
-        this.state = 'error';
+        this.setStateForCurrentUser('error');
         ToastService.show('Verbindung zum Wallet fehlgeschlagen', 'error');
         return false;
       }
 
-      // Store connection
-      this.connection = connection;
-      this.state = 'connected';
+      // Store connection in memory
+      this.setConnectionForCurrentUser(connection);
+      this.setStateForCurrentUser('connected');
 
-      // Persist to KeychainStorage (secure)
+      // Persist to KeychainStorage (secure, per-user)
       await this.saveConnection(connectionString);
 
       this.systemLogger.info('NWCService', 'Connected to NWC wallet:', connection.walletPubkey.slice(0, 8));
@@ -125,7 +181,7 @@ export class NWCService {
 
       return true;
     } catch (_error) {
-      this.state = 'error';
+      this.setStateForCurrentUser('error');
       ErrorService.handle(
         _error,
         'NWCService.connect',
@@ -216,8 +272,8 @@ export class NWCService {
   public async disconnect(): Promise<void> {
     this.systemLogger.warn('NWCService', '⚠️ DISCONNECT called - removing stored NWC connection');
 
-    this.connection = null;
-    this.state = 'disconnected';
+    this.setConnectionForCurrentUser(null);
+    this.setStateForCurrentUser('disconnected');
 
     // ONLY place where NWC connection may be deleted from KeychainStorage
     try {
@@ -233,39 +289,39 @@ export class NWCService {
 
   /**
    * Check if connected to NWC wallet
-   * Returns true if connection exists, regardless of test state
-   * (connection test may fail due to relay timeout, but connection is still usable)
+   * Returns true if connection exists for current user
    */
   public isConnected(): boolean {
-    return this.connection !== null;
+    return this.getConnectionForCurrentUser() !== null;
   }
 
   /**
    * Get current connection state
    */
   public getState(): NWCConnectionState {
-    return this.state;
+    return this.getStateForCurrentUser();
   }
 
   /**
    * Get wallet pubkey (if connected)
    */
   public getWalletPubkey(): string | null {
-    return this.connection?.walletPubkey || null;
+    return this.getConnectionForCurrentUser()?.walletPubkey || null;
   }
 
   /**
    * Get Lightning Address (lud16) from NWC connection (if available)
    */
   public getLightningAddress(): string | null {
-    return this.connection?.lud16 || null;
+    return this.getConnectionForCurrentUser()?.lud16 || null;
   }
 
   /**
    * Get wallet balance via NWC
    */
   public async getBalance(): Promise<number | null> {
-    if (!this.isConnected() || !this.connection) {
+    const connection = this.getConnectionForCurrentUser();
+    if (!connection) {
       return null;
     }
 
@@ -277,27 +333,27 @@ export class NWCService {
       });
 
       // Encrypt content with NIP-04
-      const appSecretKey = this.hexToBytes(this.connection.secret);
+      const appSecretKey = this.hexToBytes(connection.secret);
       const appPubkey = getPublicKeyFromPrivate(appSecretKey);
-      const encryptedContent = await nip04.encrypt(this.connection.secret, this.connection.walletPubkey, content);
+      const encryptedContent = await nip04.encrypt(connection.secret, connection.walletPubkey, content);
 
       // Create NWC request event (kind 23194)
       const event = finalizeEvent({
         kind: 23194,
         created_at: Math.floor(Date.now() / 1000),
-        tags: [['p', this.connection.walletPubkey]],
+        tags: [['p', connection.walletPubkey]],
         content: encryptedContent
       }, appSecretKey);
 
       // Publish to relay
-      await this.transport.publish([this.connection.relay], event);
+      await this.transport.publish([connection.relay], event);
 
       // Wait for response (kind 23195) - timeout after 10 seconds
       return new Promise(async (resolve) => {
-        const sub = await this.transport.subscribe([this.connection!.relay], [
+        const sub = await this.transport.subscribe([connection.relay], [
           {
             kinds: [23195],
-            authors: [this.connection!.walletPubkey],
+            authors: [connection.walletPubkey],
             '#p': [appPubkey],
             since: Math.floor(Date.now() / 1000)
           }
@@ -309,7 +365,7 @@ export class NWCService {
 
             try {
               // Decrypt response
-              const decrypted = await nip04.decrypt(this.connection!.secret, this.connection!.walletPubkey, event.content);
+              const decrypted = await nip04.decrypt(connection.secret, connection.walletPubkey, event.content);
               const response = JSON.parse(decrypted);
 
               if (response.error) {
@@ -343,7 +399,8 @@ export class NWCService {
    * Pay Lightning invoice via NWC
    */
   public async payInvoice(invoice: string): Promise<PayInvoiceResult> {
-    if (!this.isConnected() || !this.connection) {
+    const connection = this.getConnectionForCurrentUser();
+    if (!connection) {
       return {
         success: false,
         error: 'Not connected to NWC wallet'
@@ -360,29 +417,29 @@ export class NWCService {
       });
 
       // Encrypt content with NIP-04
-      const appSecretKey = this.hexToBytes(this.connection.secret);
+      const appSecretKey = this.hexToBytes(connection.secret);
       const appPubkey = getPublicKeyFromPrivate(appSecretKey);
-      const encryptedContent = await nip04.encrypt(this.connection.secret, this.connection.walletPubkey, content);
+      const encryptedContent = await nip04.encrypt(connection.secret, connection.walletPubkey, content);
 
       // Create NWC request event (kind 23194)
       const event = finalizeEvent({
         kind: 23194,
         created_at: Math.floor(Date.now() / 1000),
-        tags: [['p', this.connection.walletPubkey]],
+        tags: [['p', connection.walletPubkey]],
         content: encryptedContent
       }, appSecretKey);
 
       this.systemLogger.info('NWCService', 'Sending pay_invoice request...');
 
       // Publish to relay
-      await this.transport.publish([this.connection.relay], event);
+      await this.transport.publish([connection.relay], event);
 
       // Wait for response (kind 23195) - timeout after 30 seconds
       return new Promise(async (resolve) => {
-        const sub = await this.transport.subscribe([this.connection!.relay], [
+        const sub = await this.transport.subscribe([connection.relay], [
           {
             kinds: [23195],
-            authors: [this.connection!.walletPubkey],
+            authors: [connection.walletPubkey],
             '#p': [appPubkey],
             since: Math.floor(Date.now() / 1000)
           }
@@ -394,7 +451,7 @@ export class NWCService {
 
             try {
               // Decrypt response
-              const decrypted = await nip04.decrypt(this.connection!.secret, this.connection!.walletPubkey, event.content);
+              const decrypted = await nip04.decrypt(connection.secret, connection.walletPubkey, event.content);
               const response = JSON.parse(decrypted);
 
               if (response.error) {
@@ -447,7 +504,7 @@ export class NWCService {
   }
 
   /**
-   * Save connection to localStorage
+   * Save connection to KeychainStorage (per-user)
    */
   private async saveConnection(connectionString: string): Promise<void> {
     try {
@@ -460,53 +517,43 @@ export class NWCService {
   }
 
   /**
-   * Restore connection from KeychainStorage and auto-reconnect
-   * CRITICAL: Never delete stored connection automatically - only on explicit disconnect()
+   * Restore connection for current user from KeychainStorage
+   * Called on init and can be called when user changes
    */
-  private async restoreConnection(): Promise<void> {
-    const MAX_RETRIES = 3;
-    const RETRY_DELAY = 2000; // 2 seconds between retries
+  public async restoreConnectionForCurrentUser(): Promise<void> {
+    const pubkey = this.getCurrentUserPubkey();
+    if (!pubkey) return;
+
+    // Already loaded for this user?
+    if (this.connections.has(pubkey)) {
+      return;
+    }
 
     try {
-      const stored = await KeychainStorage.loadNWC();
+      const stored = await KeychainStorage.loadNWC(pubkey);
+
       if (stored) {
         this.systemLogger.info('NWCService', 'Found stored connection, attempting to reconnect...');
 
-        // Parse and store connection immediately (even if test fails)
+        // Parse and store connection
         const connection = this.parseConnectionString(stored);
-        this.connection = connection;
+        this.connections.set(pubkey, connection);
 
-        // Test connection with retries
-        let isValid = false;
-        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-          isValid = await this.testConnection(connection);
-
-          if (isValid) {
-            break;
-          }
-
-          // Wait before retry (except on last attempt)
-          if (attempt < MAX_RETRIES) {
-            await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-          }
-        }
+        // Test connection
+        const isValid = await this.testConnection(connection);
 
         if (isValid) {
-          this.state = 'connected';
+          this.states.set(pubkey, 'connected');
           this.systemLogger.info('NWCService', 'Auto-reconnected to NWC wallet');
-
-          // Dispatch event to notify UI
           window.dispatchEvent(new CustomEvent('nwc-connection-restored'));
         } else {
-          // Connection test failed after all retries, but KEEP stored connection
-          // User must explicitly disconnect to remove it
-          this.state = 'error';
-          this.systemLogger.warn('NWCService', 'Failed to auto-reconnect after 3 attempts (relay offline?), but connection kept.');
+          // Keep connection but mark as error
+          this.states.set(pubkey, 'error');
+          this.systemLogger.warn('NWCService', 'Failed to auto-reconnect (relay offline?), but connection kept.');
         }
       }
     } catch (_error) {
       this.systemLogger.error('NWCService', 'Failed to restore connection:', _error);
-      // NEVER delete stored connection on errors - only on explicit disconnect()
     }
   }
 

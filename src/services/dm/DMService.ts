@@ -73,10 +73,10 @@ export class DMService {
       this.refreshMutedPubkeys();
     });
 
-    // Listen for logout to clear DM data (multi-user support)
+    // Listen for logout - close DB connection (do NOT clear data - per-user DBs preserve data)
     this.eventBus.on('user:logout', () => {
       this.stop();
-      this.clear();
+      this.dmStore.close();
     });
   }
 
@@ -107,21 +107,10 @@ export class DMService {
         return;
       }
 
-      // Initialize store first (needed for user check)
-      await this.dmStore.init();
+      // Initialize per-user database (automatically switches if different user)
+      await this.dmStore.init(currentUser.pubkey);
 
-      // Check if this is a REAL user change (not just app restart)
-      // Only clear if we have a DIFFERENT user stored, not if userPubkey is null
-      const storedUserPubkey = await this.dmStore.getStoredUserPubkey();
-      if (storedUserPubkey && storedUserPubkey !== currentUser.pubkey) {
-        // Different user - clear old data
-        this.stop();
-        await this.clear();
-        this.systemLogger.info('DMService', 'Cleared DM data for user switch');
-      }
-
-      // Store current user pubkey for future checks
-      await this.dmStore.setStoredUserPubkey(currentUser.pubkey);
+      // Set current user pubkey
       this.userPubkey = currentUser.pubkey;
 
       this.systemLogger.info('DMService', `Starting DM service for ${currentUser.npub.slice(0, 12)}...`);

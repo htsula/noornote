@@ -12,6 +12,8 @@
 import { setPassword, getPassword, deletePassword } from 'tauri-plugin-keyring-api';
 import { ToastService } from './ToastService';
 import { PlatformService } from './PlatformService';
+import { PerAccountLocalStorage, StorageKeys } from './PerAccountLocalStorage';
+import { AuthService } from './AuthService';
 
 // IndexedDB database name and store
 const DB_NAME = 'noornote_secure';
@@ -21,9 +23,9 @@ const DB_VERSION = 1;
 export class KeychainStorage {
   private static readonly SERVICE_NAME = 'noornote';
   private static readonly KEY_NSEC = 'nsec';
-  private static readonly KEY_NWC = 'nwc_connection';
 
   private static dbPromise: Promise<IDBDatabase> | null = null;
+
 
   /**
    * Check if running in Tauri environment
@@ -158,59 +160,107 @@ export class KeychainStorage {
   }
 
   /**
-   * Save NWC connection string
+   * Get per-user NWC key name
    */
-  static async saveNWC(connectionString: string): Promise<void> {
+  private static getNwcKeyForUser(pubkey: string): string {
+    return `nwc_${pubkey}`;
+  }
+
+  /**
+   * Save NWC connection string (per-user, in Keychain)
+   * @param connectionString The NWC connection string
+   * @param pubkey The user's pubkey (required for per-user storage)
+   */
+  static async saveNWC(connectionString: string, pubkey?: string): Promise<void> {
+    // Get pubkey from AuthService if not provided
+    const userPubkey = pubkey || this.getCurrentUserPubkey();
+    if (!userPubkey) {
+      throw new Error('Cannot save NWC: no user pubkey available');
+    }
+
+    const key = this.getNwcKeyForUser(userPubkey);
+
     if (this.isTauri()) {
       try {
-        await setPassword(this.SERVICE_NAME, this.KEY_NWC, connectionString);
+        await setPassword(this.SERVICE_NAME, key, connectionString);
       } catch (_error) {
         console.error('Failed to save NWC to Keychain:', _error);
         throw new Error('Failed to save NWC connection to Keychain');
       }
     } else {
       // Browser fallback - IndexedDB
-      await this.setInIndexedDB(this.KEY_NWC, connectionString);
+      await this.setInIndexedDB(key, connectionString);
     }
   }
 
   /**
-   * Load NWC connection string
+   * Load NWC connection string (per-user, from Keychain)
+   * @param pubkey The user's pubkey (optional, uses current user if not provided)
    */
-  static async loadNWC(): Promise<string | null> {
+  static async loadNWC(pubkey?: string): Promise<string | null> {
+    // Get pubkey from AuthService if not provided
+    const userPubkey = pubkey || this.getCurrentUserPubkey();
+    if (!userPubkey) {
+      return null;
+    }
+
+    const key = this.getNwcKeyForUser(userPubkey);
+
     if (this.isTauri()) {
       try {
-        return await getPassword(this.SERVICE_NAME, this.KEY_NWC);
+        return await getPassword(this.SERVICE_NAME, key);
       } catch (_error) {
         return null;
       }
     } else {
-      return this.getFromIndexedDB(this.KEY_NWC);
+      return this.getFromIndexedDB(key);
     }
   }
 
   /**
-   * Delete NWC connection string
+   * Delete NWC connection string (per-user, from Keychain)
+   * @param pubkey The user's pubkey (optional, uses current user if not provided)
    */
-  static async deleteNWC(): Promise<void> {
+  static async deleteNWC(pubkey?: string): Promise<void> {
+    // Get pubkey from AuthService if not provided
+    const userPubkey = pubkey || this.getCurrentUserPubkey();
+    if (!userPubkey) {
+      return;
+    }
+
+    const key = this.getNwcKeyForUser(userPubkey);
+
     if (this.isTauri()) {
       try {
-        await deletePassword(this.SERVICE_NAME, this.KEY_NWC);
+        await deletePassword(this.SERVICE_NAME, key);
       } catch (_error) {
         // Ignore errors
       }
     } else {
-      await this.deleteFromIndexedDB(this.KEY_NWC);
+      await this.deleteFromIndexedDB(key);
     }
   }
 
   /**
-   * Save zap defaults (amount + comment) to localStorage
+   * Get current user's pubkey from AuthService
+   */
+  private static getCurrentUserPubkey(): string | null {
+    try {
+      const user = AuthService.getInstance().getCurrentUser();
+      return user?.pubkey || null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Save zap defaults (amount + comment) to per-user localStorage
    * Non-sensitive data, localStorage is fine
    */
   static async saveZapDefaults(amount: number, comment: string): Promise<void> {
     try {
-      localStorage.setItem('noornote_zap_defaults', JSON.stringify({ amount, comment }));
+      const storage = PerAccountLocalStorage.getInstance();
+      storage.set(StorageKeys.ZAP_DEFAULTS, { amount, comment });
     } catch (_error) {
       console.error('Failed to save zap defaults to localStorage:', _error);
       throw new Error('Failed to save zap defaults');
@@ -218,13 +268,12 @@ export class KeychainStorage {
   }
 
   /**
-   * Load zap defaults (amount + comment) from localStorage
+   * Load zap defaults (amount + comment) from per-user localStorage
    */
   static async loadZapDefaults(): Promise<{ amount: number; comment: string } | null> {
     try {
-      const stored = localStorage.getItem('noornote_zap_defaults');
-      if (!stored) return null;
-      return JSON.parse(stored);
+      const storage = PerAccountLocalStorage.getInstance();
+      return storage.get<{ amount: number; comment: string } | null>(StorageKeys.ZAP_DEFAULTS, null);
     } catch (_error) {
       console.error('Failed to load zap defaults from localStorage:', _error);
       return null;
@@ -232,11 +281,12 @@ export class KeychainStorage {
   }
 
   /**
-   * Delete zap defaults from localStorage
+   * Delete zap defaults from per-user localStorage
    */
   static async deleteZapDefaults(): Promise<void> {
     try {
-      localStorage.removeItem('noornote_zap_defaults');
+      const storage = PerAccountLocalStorage.getInstance();
+      storage.remove(StorageKeys.ZAP_DEFAULTS);
     } catch (_error) {
       // Ignore errors
     }

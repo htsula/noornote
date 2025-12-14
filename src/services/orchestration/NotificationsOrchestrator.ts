@@ -24,6 +24,7 @@ import { SystemLogger } from '../../components/system/SystemLogger';
 import { AuthService } from '../AuthService';
 import { EventBus } from '../EventBus';
 import { decodeNip19 } from '../NostrToolsAdapter';
+import { PerAccountLocalStorage, StorageKeys } from '../PerAccountLocalStorage';
 
 export type NotificationType = 'mention' | 'reply' | 'thread-reply' | 'repost' | 'reaction' | 'zap' | 'article' | 'mutual_unfollow' | 'mutual_new';
 
@@ -58,10 +59,8 @@ export class NotificationsOrchestrator extends Orchestrator {
   /** Callback for real-time updates */
   private onNewNotificationCallback: ((notification: NotificationEvent) => void) | null = null;
 
-  /** Storage keys (only for metadata, not notifications themselves) */
-  private readonly STORAGE_LAST_SEEN = 'noornote_notifications_last_seen';
-  private readonly STORAGE_USER_EVENT_IDS = 'noornote_user_event_ids';
-  private readonly STORAGE_USER_EVENT_ANCESTRY = 'noornote_user_event_ancestry';
+  /** Per-account storage instance */
+  private perAccountStorage: PerAccountLocalStorage;
 
   /** Map of user event ID -> ancestry (root/parent IDs) for muted thread checking */
   private userEventAncestry: Map<string, { rootId: string | null; parentId: string | null }> = new Map();
@@ -73,6 +72,7 @@ export class NotificationsOrchestrator extends Orchestrator {
     this.systemLogger = SystemLogger.getInstance();
     this.authService = AuthService.getInstance();
     this.eventBus = EventBus.getInstance();
+    this.perAccountStorage = PerAccountLocalStorage.getInstance();
 
     this.systemLogger.info('NotificationsOrchestrator', '🔔 Notifications Orchestrator initialized');
   }
@@ -457,7 +457,7 @@ export class NotificationsOrchestrator extends Orchestrator {
       }]);
 
       const eventIds = userEvents.map(e => e.id);
-      localStorage.setItem(this.STORAGE_USER_EVENT_IDS, JSON.stringify(eventIds));
+      this.perAccountStorage.set(StorageKeys.USER_EVENT_IDS, eventIds);
 
       // Store ancestry (root/parent) for each user event (for muted thread checking)
       const ancestryMap: Record<string, { rootId: string | null; parentId: string | null }> = {};
@@ -475,7 +475,7 @@ export class NotificationsOrchestrator extends Orchestrator {
         ancestryMap[event.id] = { rootId, parentId };
         this.userEventAncestry.set(event.id, { rootId, parentId });
       }
-      localStorage.setItem(this.STORAGE_USER_EVENT_ANCESTRY, JSON.stringify(ancestryMap));
+      this.perAccountStorage.set(StorageKeys.USER_EVENT_ANCESTRY, ancestryMap);
 
       this.systemLogger.info('NotificationsOrchestrator', `📋 Stored ${eventIds.length} user event IDs with ancestry`);
     } catch (error) {
@@ -553,7 +553,7 @@ export class NotificationsOrchestrator extends Orchestrator {
    */
   public markAsRead(): void {
     const now = Math.floor(Date.now() / 1000);
-    localStorage.setItem(this.STORAGE_LAST_SEEN, now.toString());
+    this.perAccountStorage.set(StorageKeys.NOTIFICATIONS_LAST_SEEN, now);
     this.systemLogger.info('NotificationsOrchestrator', `✅ Marked as read (${now})`);
   }
 
@@ -565,34 +565,24 @@ export class NotificationsOrchestrator extends Orchestrator {
   }
 
   /**
-   * Get user's event IDs from localStorage (for #e filter)
+   * Get user's event IDs from per-account storage (for #e filter)
    */
   private getUserEventIds(): string[] {
-    const stored = localStorage.getItem(this.STORAGE_USER_EVENT_IDS);
-    if (!stored) return [];
-
-    try {
-      return JSON.parse(stored);
-    } catch {
-      return [];
-    }
+    return this.perAccountStorage.get<string[]>(StorageKeys.USER_EVENT_IDS, []);
   }
 
   /**
-   * Load user event ancestry from localStorage into memory
+   * Load user event ancestry from per-account storage into memory
    */
   private loadUserEventAncestry(): void {
-    const stored = localStorage.getItem(this.STORAGE_USER_EVENT_ANCESTRY);
-    if (!stored) return;
+    const ancestryMap = this.perAccountStorage.get<Record<string, { rootId: string | null; parentId: string | null }>>(
+      StorageKeys.USER_EVENT_ANCESTRY,
+      {}
+    );
 
-    try {
-      const ancestryMap = JSON.parse(stored);
-      this.userEventAncestry.clear();
-      for (const [eventId, ancestry] of Object.entries(ancestryMap)) {
-        this.userEventAncestry.set(eventId, ancestry as { rootId: string | null; parentId: string | null });
-      }
-    } catch {
-      // Ignore parse errors
+    this.userEventAncestry.clear();
+    for (const [eventId, ancestry] of Object.entries(ancestryMap)) {
+      this.userEventAncestry.set(eventId, ancestry);
     }
   }
 
@@ -623,11 +613,11 @@ export class NotificationsOrchestrator extends Orchestrator {
   }
 
   /**
-   * Get last seen timestamp from localStorage
+   * Get last seen timestamp from per-account storage
    */
   private getLastSeenTimestamp(): number | null {
-    const stored = localStorage.getItem(this.STORAGE_LAST_SEEN);
-    return stored ? parseInt(stored, 10) : null;
+    const stored = this.perAccountStorage.get<number | null>(StorageKeys.NOTIFICATIONS_LAST_SEEN, null);
+    return stored;
   }
 
   /**

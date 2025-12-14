@@ -1,15 +1,16 @@
 /**
  * Notifications Cache Service
- * Manages localStorage cache for notifications (fast reload on view switches)
+ * Manages per-user localStorage cache for notifications (fast reload on view switches)
  *
  * Features:
- * - Cache notifications in localStorage
+ * - Cache notifications per-user in localStorage (Jumble Pattern)
  * - Track lastSeen (for badge calculation)
  * - Track lastFetch (for incremental updates)
  * - FIFO queue (max X notifications, configurable)
  */
 
 import type { NostrEvent } from '@nostr-dev-kit/ndk';
+import { PerAccountLocalStorage, StorageKeys } from './PerAccountLocalStorage';
 
 interface NotificationsCache {
   events: NostrEvent[];
@@ -19,11 +20,13 @@ interface NotificationsCache {
 
 export class NotificationsCacheService {
   private static instance: NotificationsCacheService;
-  private cacheKey = 'noornote_notifications_cache';
-  private limitKey = 'noornote_notifications_cache_limit';
+  private limitKey = 'noornote_notifications_cache_limit'; // Global setting, not per-user
   private defaultLimit = 100;
+  private perAccountStorage: PerAccountLocalStorage;
 
-  private constructor() {}
+  private constructor() {
+    this.perAccountStorage = PerAccountLocalStorage.getInstance();
+  }
 
   public static getInstance(): NotificationsCacheService {
     if (!NotificationsCacheService.instance) {
@@ -33,7 +36,7 @@ export class NotificationsCacheService {
   }
 
   /**
-   * Get cache limit (user-configurable in Settings)
+   * Get cache limit (user-configurable in Settings) - global, not per-user
    */
   public getLimit(): number {
     try {
@@ -60,29 +63,17 @@ export class NotificationsCacheService {
   }
 
   /**
-   * Load cache from localStorage
+   * Load cache from per-account storage
    */
   public loadCache(): NotificationsCache | null {
-    try {
-      const stored = localStorage.getItem(this.cacheKey);
-      if (stored) {
-        return JSON.parse(stored);
-      }
-    } catch (error) {
-      console.error('Failed to load notifications cache:', error);
-    }
-    return null;
+    return this.perAccountStorage.get<NotificationsCache | null>(StorageKeys.NOTIFICATIONS_CACHE, null);
   }
 
   /**
-   * Save cache to localStorage
+   * Save cache to per-account storage
    */
   public saveCache(cache: NotificationsCache): void {
-    try {
-      localStorage.setItem(this.cacheKey, JSON.stringify(cache));
-    } catch (error) {
-      console.error('Failed to save notifications cache:', error);
-    }
+    this.perAccountStorage.set(StorageKeys.NOTIFICATIONS_CACHE, cache);
   }
 
   /**
@@ -104,7 +95,8 @@ export class NotificationsCacheService {
     }
 
     // Also update NotificationsOrchestrator's lastSeen (for badge count)
-    localStorage.setItem('noornote_notifications_last_seen', now.toString());
+    // Uses the same per-account storage key
+    this.perAccountStorage.set(StorageKeys.NOTIFICATIONS_LAST_SEEN, now);
   }
 
   /**
@@ -176,14 +168,10 @@ export class NotificationsCacheService {
   }
 
   /**
-   * Clear cache
+   * Clear cache for current user
    */
   public clearCache(): void {
-    try {
-      localStorage.removeItem(this.cacheKey);
-    } catch (error) {
-      console.error('Failed to clear notifications cache:', error);
-    }
+    this.perAccountStorage.remove(StorageKeys.NOTIFICATIONS_CACHE);
   }
 
   /**
