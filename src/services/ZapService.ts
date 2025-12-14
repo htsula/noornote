@@ -290,8 +290,8 @@ export class ZapService {
       // Step 2: Fetch Kind 0 (profile) from user's outbound relays
       const profiles: NostrEvent[] = [];
 
-      await new Promise<void>((resolve) => {
-        const sub = this.nostrTransport.subscribe(
+      await new Promise<void>(async (resolve) => {
+        const sub = await this.nostrTransport.subscribe(
           writeRelays,
           [{ kinds: [0], authors: [pubkey], limit: 1 }],
           {
@@ -521,7 +521,7 @@ export class ZapService {
    * Note: This is background verification - payment success is already confirmed
    */
   private async waitForZapReceipt(invoice: string, recipientPubkey: string): Promise<boolean> {
-    return new Promise((resolve) => {
+    return new Promise(async (resolve) => {
       try {
         const relays = this.relayConfig.getReadRelays();
 
@@ -532,7 +532,7 @@ export class ZapService {
 
         const verificationService = SignatureVerificationService.getInstance();
 
-        const sub = this.nostrTransport.subscribe(
+        const sub = await this.nostrTransport.subscribe(
           relays,
           [{
             kinds: [9735], // Zap receipt

@@ -11,7 +11,7 @@
  * @used-by BookmarkSecondaryManager, MuteListSecondaryManager, FollowListSecondaryManager
  */
 
-import { ListSyncManager } from './sync/ListSyncManager';
+import { ListSyncManager, type SyncFromRelaysResult } from './sync/ListSyncManager';
 
 export interface RestoreResult {
   source: 'browser' | 'file' | 'relays' | 'empty';
@@ -38,6 +38,7 @@ export class RestoreListsService {
    * @param setBrowserItems - Function to set browser items
    * @param listName - Name for logging (e.g., 'bookmarks', 'mutes', 'follows')
    * @param beforeFileRestore - Optional callback before file restore (e.g., restore folder data)
+   * @param afterRelaySync - Optional callback after relay sync (e.g., create folders from categories)
    * @returns RestoreResult with source and item count
    */
   public async restoreIfEmpty<T>(
@@ -45,7 +46,8 @@ export class RestoreListsService {
     getBrowserItems: () => T[],
     _setBrowserItems: (items: T[]) => void,
     listName: string,
-    beforeFileRestore?: () => Promise<void>
+    beforeFileRestore?: () => Promise<void>,
+    afterRelaySync?: (result: SyncFromRelaysResult<T>) => Promise<void>
   ): Promise<RestoreResult> {
     // Step 1: Check browser storage
     let items = getBrowserItems();
@@ -81,6 +83,12 @@ export class RestoreListsService {
       if (result.relayItems.length > 0) {
         // Apply relay items to browser storage
         await listSyncManager.applySyncFromRelays('merge', result.relayItems, result.relayContentWasEmpty);
+
+        // Call afterRelaySync callback (e.g., create folders from categories)
+        if (afterRelaySync) {
+          await afterRelaySync(result);
+        }
+
         items = getBrowserItems();
         if (items.length > 0) {
           console.log(`[RestoreListsService] ${listName}: Restored ${items.length} items from relays`);

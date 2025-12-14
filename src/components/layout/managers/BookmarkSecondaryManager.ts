@@ -179,6 +179,46 @@ export class BookmarkSecondaryManager {
         async () => {
           // Restore folder data before file restore
           await this.adapter.restoreFolderDataFromFile();
+        },
+        async (syncResult) => {
+          // After relay sync: create folders from categories and assign bookmarks
+          if (syncResult.categoryAssignments && syncResult.categoryAssignments.size > 0) {
+            const existingFolders = this.folderService.getFolders();
+
+            // Collect categories that have items (skip empty string = root)
+            const categoriesWithItems = new Set<string>();
+            for (const [, categoryName] of syncResult.categoryAssignments) {
+              if (categoryName !== '') {
+                categoriesWithItems.add(categoryName);
+              }
+            }
+
+            // Create folders for new categories
+            for (const categoryName of categoriesWithItems) {
+              const existingFolder = existingFolders.find(f => f.name === categoryName);
+              if (!existingFolder) {
+                this.folderService.createFolder(categoryName);
+                console.log(`[BookmarkSecondaryManager] Created folder from relay: "${categoryName}"`);
+              }
+            }
+
+            // Assign bookmarks to their categories from relay
+            const updatedFolders = this.folderService.getFolders();
+            for (const [bookmarkId, categoryName] of syncResult.categoryAssignments) {
+              if (categoryName === '') {
+                // Root - ensure assignment exists
+                this.folderService.ensureBookmarkAssignment(bookmarkId);
+              } else {
+                // Find folder by name and move bookmark there
+                const folder = updatedFolders.find(f => f.name === categoryName);
+                if (folder) {
+                  this.folderService.moveBookmarkToFolder(bookmarkId, folder.id);
+                }
+              }
+            }
+
+            console.log(`[BookmarkSecondaryManager] Restored ${categoriesWithItems.size} folders from relays`);
+          }
         }
       );
 
@@ -1112,17 +1152,29 @@ export class BookmarkSecondaryManager {
 
       const result = await this.listSyncManager.syncFromRelays();
 
+      console.log('[BookmarkSecondaryManager] Sync result:', {
+        itemCount: result.relayItems.length,
+        hasCategoryAssignments: !!result.categoryAssignments,
+        categoryAssignmentsSize: result.categoryAssignments?.size || 0,
+        categories: result.categories
+      });
+
       // Helper to apply folder assignments after sync
       const applyFolderAssignments = () => {
-        if (!result.categoryAssignments) return;
+        if (!result.categoryAssignments) {
+          console.log('[BookmarkSecondaryManager] No categoryAssignments in result');
+          return;
+        }
 
         // Collect categories that actually have items
         const categoriesWithItems = new Set<string>();
-        for (const [, categoryName] of result.categoryAssignments) {
+        for (const [bookmarkId, categoryName] of result.categoryAssignments) {
+          console.log(`[applyFolderAssignments] Bookmark ${bookmarkId.slice(0, 8)} -> category "${categoryName}"`);
           if (categoryName !== '') {
             categoriesWithItems.add(categoryName);
           }
         }
+        console.log('[applyFolderAssignments] Categories with items:', Array.from(categoriesWithItems));
 
         // Create folders only for categories that have items (skip empty ones)
         const existingFolders = this.folderService.getFolders();

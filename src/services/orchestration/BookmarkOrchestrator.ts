@@ -445,10 +445,16 @@ export class BookmarkOrchestrator extends GenericListOrchestrator<BookmarkItem> 
     // Assign bookmarks to sets (using item.category, fallback to FolderService for migration)
     for (const item of allItems) {
       let category = item.category;
-      if (category === undefined) {
+
+      // If category is undefined OR empty string, try to get from FolderService
+      if (category === undefined || category === '') {
         const folderId = this.folderService.getBookmarkFolder(item.id);
         const folder = folderId ? this.folderService.getFolder(folderId) : null;
-        category = folder?.name ?? '';
+        if (folder) {
+          category = folder.name;
+        } else {
+          category = '';
+        }
       }
 
       // Only use category if the folder still exists, otherwise assign to root

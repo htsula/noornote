@@ -9,6 +9,7 @@
     "core:default",
     "keyring:default",
     "dialog:default",
+    "log:default",
     "fs:default",
     "fs:allow-write-file",
     {
