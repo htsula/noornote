@@ -36,8 +36,9 @@ export class UserService {
    * Get user's following list
    * - For current user: reads from browserItems (localStorage)
    * - For other users: fetches from relays (NDK cached)
+   * @param forceRefresh - Skip NDK cache and fetch fresh from relays
    */
-  public async getUserFollowing(pubkey: string): Promise<string[]> {
+  public async getUserFollowing(pubkey: string, forceRefresh: boolean = false): Promise<string[]> {
     const currentUser = AuthService.getInstance().getCurrentUser();
     const isCurrentUser = currentUser?.pubkey === pubkey;
 
@@ -47,7 +48,7 @@ export class UserService {
     }
 
     // For other users: fetch from relays (NDK cached)
-    return this.getOtherUserFollowing(pubkey);
+    return this.getOtherUserFollowing(pubkey, forceRefresh);
   }
 
   /**
@@ -86,17 +87,19 @@ export class UserService {
 
   /**
    * Get another user's following list from relays (NDK cached)
+   * @param forceRefresh - Skip NDK cache and fetch fresh from relays
    */
-  private async getOtherUserFollowing(pubkey: string): Promise<string[]> {
+  private async getOtherUserFollowing(pubkey: string, forceRefresh: boolean = false): Promise<string[]> {
     try {
       const relays = this.relayConfig.getAggregatorRelays();
 
       // Fetch kind:3 contact list from relays
+      // If forceRefresh, skip NDK cache to get fresh data
       const events = await this.transport.fetch(relays, [{
         authors: [pubkey],
         kinds: [3],
         limit: 1
-      }], 5000);
+      }], 5000, forceRefresh);
 
       if (events.length === 0) {
         return [];

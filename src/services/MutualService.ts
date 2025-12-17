@@ -167,6 +167,23 @@ export class MutualService {
   }
 
   /**
+   * Check if a specific user follows back with fresh data (no cache)
+   * Used for double-checking to prevent false positives
+   */
+  public async checkIfMutualFresh(pubkey: string): Promise<boolean> {
+    const currentUser = this.authService.getCurrentUser();
+    if (!currentUser) return false;
+
+    try {
+      // Use UserService with forceRefresh to bypass all caches
+      const theirFollows = await this.userService.getUserFollowing(pubkey, true);
+      return theirFollows.includes(currentUser.pubkey);
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Clear cache for a specific pubkey
    */
   public clearCacheForPubkey(pubkey: string): void {

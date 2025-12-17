@@ -164,9 +164,23 @@ export class MutualChangeDetector {
       const currentMutuals = new Set(currentMutualPubkeys);
 
       // Unfollows: in previous but NOT in current
-      const unfollows = previousSnapshot.mutualPubkeys.filter(
+      const potentialUnfollows = previousSnapshot.mutualPubkeys.filter(
         pubkey => !currentMutuals.has(pubkey)
       );
+
+      // DOUBLE-CHECK unfollows to prevent false positives
+      // Re-check each potential unfollow with fresh data (bypasses all caches)
+      const unfollows: string[] = [];
+      if (potentialUnfollows.length > 0) {
+        for (const pubkey of potentialUnfollows) {
+          const stillMutual = await this.mutualService.checkIfMutualFresh(pubkey);
+          if (!stillMutual) {
+            unfollows.push(pubkey);
+          } else {
+            this.systemLogger.info('MutualChangeDetector', `False positive prevented: ${pubkey.slice(0, 8)}... still follows`);
+          }
+        }
+      }
 
       // New mutuals: in current but NOT in previous
       const newMutuals = currentMutualPubkeys.filter(
